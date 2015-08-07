@@ -29,52 +29,23 @@ __all__ = [
     "basic_parser",
     "load_world",
     "get_player",
+    "load_player_dimension",
     "Item",
-    "item_type",
-    "item_name",
-    "get_itemkey",
     "get_chunks",
     "iter_chunks",
     "MCError",
 ]
 
 
-import os
 import os.path as osp
 import argparse
 import logging
-from xdg.BaseDirectory import xdg_cache_home
 import time
 
 import progressbar
 
 
 log = logging.getLogger(__name__)
-
-
-def setuplogging(name, level):
-    # Console output
-    for logger, lvl in [(log, level),
-                        # pymclevel is too verbose
-                        (logging.getLogger("pymclevel"), logging.WARNING)]:
-        sh = logging.StreamHandler()
-        sh.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
-        sh.setLevel(lvl)
-        logger.addHandler(sh)
-
-    # File output
-    logger = logging.getLogger()  # root logger, so it also applies to pymclevel
-    logger.setLevel(logging.DEBUG)  # set to minimum so it doesn't discard file output
-    try:
-        logdir = osp.join(xdg_cache_home, 'minecraft')
-        if not osp.exists(logdir):
-            os.makedirs(logdir)
-        fh = logging.FileHandler(osp.join(logdir, "%s.log" % name))
-        fh.setFormatter(logging.Formatter('%(asctime)s\t%(levelname)s\t%(name)s\t%(message)s'))
-        fh.setLevel(logging.DEBUG)
-        logger.addHandler(fh)
-    except IOError as e:  # Probably access denied
-        logger.warn("%s\nLogging will not work.", e)
 
 
 def basic_parser(description=None,
@@ -134,144 +105,55 @@ def get_player(world, playername=None):
                              (world.LevelName, playername))
 
 
-_ItemTypes = None
-def item_type(item):
-    '''Wrapper to pymclevel Items.findItem() with corrected data'''
-    global _ItemTypes
-    if _ItemTypes is None:
-        from pymclevel.items import items as ItemTypes
+def load_player_dimension(levelname, playername=None):
+    world = load_world(levelname)
+    player = get_player(world, playername)
+    if not player["Dimension"].value == 0:  # 0 = Overworld
+        world = world.getDimension(player["Dimension"].value)
 
-        for itemid, maxdamage in ((298,  56),  # Leather Cap
-                                  (299,  81),  # Leather_Tunic
-                                  (300,  76),  # Leather_Pants
-                                  (301,  66),  # Leather_Boots
-                                  (302, 166),  # Chainmail_Helmet
-                                  (303, 241),  # Chainmail_Chestplate
-                                  (304, 226),  # Chainmail_Leggings
-                                  (305, 196),  # Chainmail_Boots
-                                  (306, 166),  # Iron_Helmet
-                                  (307, 241),  # Iron_Chestplate
-                                  (308, 226),  # Iron_Leggings
-                                  (309, 196),  # Iron_Boots
-                                  (310, 364),  # Diamond_Helmet
-                                  (311, 529),  # Diamond_Chestplate
-                                  (312, 496),  # Diamond_Leggings
-                                  (313, 430),  # Diamond_Boots
-                                  (314,  78),  # Golden_Helmet
-                                  (315,  87),  # Golden_Chestplate
-                                  (316,  76),  # Golden_Leggings
-                                  (317,  66),  # Golden_Boots
-                                  ):
-            ItemTypes.findItem(itemid).maxdamage = maxdamage - 1
-
-        for itemid, stacksize in ((58,  64),  # Workbench (Crafting Table)
-                                  (116, 64),  # Enchantment Table
-                                  (281, 64),  # Bowl
-                                  (282,  1),  # Mushroom Stew
-                                  (324,  1),  # Wooden Door
-                                  (337, 64),  # Clay (Ball)
-                                  (344, 16),  # Egg
-                                  (345, 64),  # Compass
-                                  (347, 64),  # Clock
-                                  (368, 16),  # Ender Pearl
-                                  (379, 64),  # Brewing Stand
-                                  (380, 64),  # Cauldron
-                                  (395, 64),  # Empty Map
-                                  ):
-            ItemTypes.findItem(itemid).stacksize = stacksize
-        for itemtype in ItemTypes.itemtypes.itervalues():
-            if itemtype.maxdamage is not None:
-                itemtype.stacksize = 1
-        _ItemTypes = ItemTypes
-
-    return _ItemTypes.findItem(item["id"].value,
-                               item["Damage"].value)
-
-
-def item_name(item, itemtype=None):
-    itemtype = itemtype or item_type(item)
-    if 'tag' in item and 'display' in item['tag']:
-        return "%s [%s]" % (item['tag']['display']['Name'].value,
-                            itemtype.name)
-    else:
-        return itemtype.name
-
-
-def get_itemkey(item):
-    return (item["id"].value,
-            item["Damage"].value)
+    return world, player
 
 
 class NbtObject(object):
-    '''High-level wrapper for NBT Compound tags
+    '''High-level wrapper for NBT Compound tags'''
 
-        HUGE FLAW: `obj.attr = value` does not update nbt!!!
-
-    '''
-
-    def __init__(self, nbt, attrs=()):
+    def __init__(self, nbt, keys=None):
         import pymclevel.nbt
 
         assert nbt.tagID == pymclevel.nbt.TAG_COMPOUND, \
             "Can not create NbtObject from a non-compound NBT tag"
 
-        self._nbt = nbt
-
-        for attr in attrs:
-            setattr(self, attr.lower(), self._objectify(self._nbt[attr]))
-
-    def _objectify(self, nbt):
-        import pymclevel.nbt
-
-        if nbt.tagID == pymclevel.nbt.TAG_COMPOUND:
-            return NbtObject(nbt)
-
-        if nbt.tagID == pymclevel.nbt.TAG_LIST:
-            items = []
-            for item in nbt:
-                items.append(self._objectify(item))
-            return items
-
-        return nbt.value
+        self.nbt = nbt
+        self.keys = keys or []  # dummy, for now
 
     def __str__(self):
-        return str(self._nbt)
+        return str(self.nbt)
 
     def __repr__(self):
         return "<%s>" % (self.__class__.__name__)
 
-    def __getitem__(self, name):
-        '''Allow accessing `obj.somename` as `obj["somename"]`'''
-        return getattr(self, name)
+    def __setitem__(self, key, value):
+        '''Set `obj.nbt["SomeKey"].value = value` as `obj["SomeKey"] = value`'''
+        self.nbt[key].value = value
+
+    def __getitem__(self, key):
+        '''Access `obj.nbt["SomeKey"].value` as `obj["SomeKey"]`'''
+        return self.nbt[key].value
 
     def __contains__(self, name):
-        '''Allow case-insensitive usage of `attr in obj`'''
-        return name in self._nbt or hasattr(self, name)
-
-    def __getattr__(self, name):
-        '''Fallback for non-objectified attributes from nbt data
-            Allow accessing `obj._nbt["SomeName"].value` as `obj.somename`
-        '''
-        try:
-            return self._objectify(self._nbt[name])
-        except KeyError:
-            lowername = name.lower()
-            for attr in self._nbt:
-                if attr.lower() == lowername:
-                    return self._objectify(self._nbt[attr])
-            else:
-                raise AttributeError("'%s' object has no attribute '%s'"
-                                     % (self.__class__.__name__,
-                                        name))
+        '''Allow `if key in obj...`'''
+        return name in self.nbt
 
 
 class Item(NbtObject):
     _ItemTypes = None
     armor_ids = set(range(298, 318))
 
-    def __init__(self, nbt):
-        super(Item, self).__init__(nbt, ("id", "Damage", "Count"))
-        self.nbt = nbt  # avoid usage
+    def __init__(self, nbt, keys=None):
+        if keys is None:
+            keys = []
+        keys.extend(("id", "Damage", "Count", "tag"))
+        super(Item, self).__init__(nbt, keys)
 
         # Improve upon pymclevel item data
         if self._ItemTypes is None:
@@ -326,36 +208,53 @@ class Item(NbtObject):
             # Save the corrected data to class attribute
             self._ItemTypes = ItemTypes
 
-        # These should be properties,
-        # but for simplicity and performance they're set here
-        self.key = (self.id, self.damage)
+        # Should be a property, but for simplicity and performance it's set here
         self.type = self._ItemTypes.findItem(*self.key)
-        self.name = self._name()
-        self.description = self._description()
-        self.is_armor = self.id in self.armor_ids
 
-    def _name(self):
-        # nbt keys are used instead of object attributes to document
-        # key name with proper case
-        if 'tag' in self and 'display' in self['tag']:
-            return "%s [%s]" % (self['tag']['display']['Name'],
+    @property
+    def is_armor(self):
+        return self.nbt['id'].value in self.armor_ids
+
+    @property
+    def key(self):
+        return (self.nbt['id'].value,
+                self.nbt['Damage'].value,)
+
+    @property
+    def name(self):
+        '''Item type name and its custom name (via Anvil), if any
+            Examples: `Diamond Sword`, `Combat Sword [Diamond Sword]`
+        '''
+        if 'tag' in self.nbt and 'display' in self.nbt['tag']:
+            return "%s [%s]" % (self.nbt['tag']['display']['Name'].value,
                                 self.type.name)
         else:
             return self.type.name
 
-    def _description(self):
-        if 'tag' in self and 'ench' in self['tag']:
-            enchants = len(self['tag']['ench'])
-            strench = " {%d enchantment%s}" % (enchants,
-                                               "s" if enchants > 1 else "")
+    @property
+    def fullname(self):
+        '''Item name with enchantment count.
+            Example: `Combat Sword [Diamond Sword] {3 enchantments}`
+        '''
+        if 'tag' in self.nbt and 'ench' in self.nbt['tag']:
+            enchants = len(self.nbt['tag']['ench'])
+            ench_str = " {%d enchantment%s}" % (enchants,
+                                                "s" if enchants > 1 else "")
         else:
-            strench = ""
+            ench_str = ""
 
-        return "%2d %s%s" % (self.count, self.name, strench)
+        return "%s%s" % (self.name, ench_str)
+
+    @property
+    def description(self):
+        '''Item full name with item count.
+            Examples: `42 Coal`, ` 1 Super Bow [Bow] {3 enchantments}`
+        '''
+        return "%2d %s" % (self.nbt["Count"].value, self.fullname)
 
     def __str__(self):
-        return "%2d %s" % (self.count, self.name)
-
+        '''Item count and name. Example: ` 1 Super Bow [Bow]`'''
+        return "%2d %s" % (self.nbt["Count"].value, self.name)
 
 
 def get_chunks(world, x=None, z=None, radius=250):
