@@ -263,12 +263,21 @@ def get_chunks(world, x=None, z=None, radius=250):
     if x is None and z is None:
         return world.chunkCount, world.allChunks
 
-    ox = world.bounds.minx if x is None else x - radius
-    oz = world.bounds.minz if z is None else z - radius
+    if x is None:
+        ox = world.bounds.minx
+        sx = world.bounds.maxx - ox
+    else:
+        ox = x - radius
+        sx = 2 * radius
 
-    bounds = box.BoundingBox((ox, 0, oz),
-                             (2 * radius, world.Height,
-                              2 * radius))
+    if z is None:
+        oz = world.bounds.minz
+        sz = world.bounds.maxz - oz
+    else:
+        oz = z - radius
+        sz = 2 * radius
+
+    bounds = box.BoundingBox((ox, 0, oz), (sx, world.Height, sz))
 
     return bounds.chunkCount, bounds.chunkPositions
 
