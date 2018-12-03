@@ -41,6 +41,7 @@ import os.path as osp
 import argparse
 import logging
 import time
+import itertools
 
 import progressbar
 
@@ -147,7 +148,13 @@ class NbtObject(object):
 
 class Item(NbtObject):
     _ItemTypes = None
-    armor_ids = set(range(298, 318))
+    armor_ids = tuple(range(298, 318))
+    armor_strids = tuple(
+        'minecraft:{0}'.format('_'.join(_))
+        for _ in
+        itertools.product(('leather', 'chainmail', 'iron', 'diamond', 'golden'),
+                          ('helmet', 'chestplate', 'leggings', 'boots'))
+    ) + ('turtle_helmet',)
 
     def __init__(self, nbt, keys=None):
         if keys is None:
@@ -211,9 +218,13 @@ class Item(NbtObject):
         # Should be a property, but for simplicity and performance it's set here
         self.type = self._ItemTypes.findItem(*self.key)
 
+        # Fix for items using non-numeric IDs
+        if isinstance(self.type.id, basestring):
+            self.type.name = self._type_name(self.type.id)
+
     @property
     def is_armor(self):
-        return self.nbt['id'].value in self.armor_ids
+        return self.nbt['id'].value in self.armor_ids + self.armor_strids
 
     @property
     def key(self):
@@ -255,6 +266,10 @@ class Item(NbtObject):
     def __str__(self):
         '''Item count and name. Example: ` 1 Super Bow [Bow]`'''
         return "%2d %s" % (self.nbt["Count"].value, self.name)
+
+    @staticmethod
+    def _type_name(name):
+        return name.split(':', 1)[-1].replace('_', ' ').title()
 
 
 def get_chunks(world, x=None, z=None, radius=250):
