@@ -121,6 +121,8 @@ def load_player_dimension(levelname, playername=None):
     return world, player
 
 
+
+
 class NbtObject(object):
     '''High-level wrapper for NBT Compound tags'''
 
@@ -248,9 +250,9 @@ class ItemTypes(object):
 
     @classmethod
     def _load_default_items(cls):
-            cls._add_item(ItemType(0, 'air', None, 'Air', False, True))
-            cls._load_old_json(osp.join(DATADIR, 'tmp_itemblocks.json'), True)
-            cls._load_old_json(osp.join(DATADIR, 'tmp_items.json'))
+        cls._add_item(ItemType(0, 'air', None, 'Air', False, True))
+        cls._load_old_json(osp.join(DATADIR, 'tmp_itemblocks.json'), True)
+        cls._load_old_json(osp.join(DATADIR, 'tmp_items.json'))
 
     @classmethod
     def _add_item(cls, item, prefix='minecraft', duplicate_prefix='removed'):
@@ -330,8 +332,12 @@ class ItemType(object):
             "Stack size must be 1, 16 or 64: {0}".format(self)
 
     def __repr__(self):
-        meta = '' if self.meta is None else '#{0}'.format(self.meta)
-        return '<{0.__class__.__name__}({0.numid:3d}, {0.strid}{1}, "{0.name}")>'.format(self, meta)
+        numid = '' if self.numid is None else '{0:3d}, '.format(self.numid)
+        meta  = '' if self.meta  is None else '#{0}'.format(self.meta)
+        return '<{0.__class__.__name__}({1}{0.strid}{2}, "{0.name}")>'.format(
+            self, numid, meta)
+
+
 
 
 class Item(NbtObject):
@@ -458,6 +464,8 @@ class Item(NbtObject):
     @staticmethod
     def _type_name(name):
         return name.split(':', 1)[-1].replace('_', ' ').title()
+
+
 
 
 def get_chunks(world, x=None, z=None, radius=250):
