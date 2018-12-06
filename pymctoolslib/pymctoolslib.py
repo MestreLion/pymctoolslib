@@ -196,22 +196,18 @@ class ItemTypes(object):
 
         # Check for numeric ID and use the alternate dictionary
         if isinstance(itemid, (int, float)):
-            try:
-                return cls._items_by_numid[(int(itemid), meta)]
-            except KeyError:
-                pass
-            return cls._items_by_numid[(int(itemid), None)]
-
+            if (itemid, meta) not in cls._items_by_numid:
+                meta = None
+            return cls._items_by_numid[(int(itemid), meta)]
 
         # Add default prefix if needed, so 'dirt' => 'minecraft:dirt'
         if ':' not in itemid:
             itemid = ':'.join((prefix, itemid))
 
-        try:
-            return cls.items[(itemid, meta)]
-        except KeyError:
-            pass
-        return cls.items[(itemid, None)]
+        if (itemid, meta) not in cls.items:
+            meta = None
+
+        return cls.items[(itemid, meta)]
 
 
     @classmethod
@@ -285,6 +281,7 @@ class ItemTypes(object):
     def _add_item(cls, item, prefix='minecraft', duplicate_prefix='removed'):
         strid = item.strid
         numid = item.numid
+        meta  = item.meta  # or 0
 
         # If StrID is missing, derive from name
         if not strid:
@@ -295,7 +292,7 @@ class ItemTypes(object):
             strid = ':'.join((prefix, strid))
 
         # Check for duplicate StrID and add duplicated prefix
-        if (strid, item.meta) in cls.items:
+        if (strid, meta) in cls.items:
             strid = ':'.join((duplicate_prefix, strid))
             item.removed = True
 
@@ -304,7 +301,7 @@ class ItemTypes(object):
             numid = min(cls._items_by_numid)[0] - 1
 
         # Check for duplicate NumID
-        if (numid, item.meta) in cls._items_by_numid:
+        if (numid, meta) in cls._items_by_numid:
             raise KeyError("Item NumID must be unique or None: {0}".format(item))
 
         # Armor handling
@@ -313,8 +310,8 @@ class ItemTypes(object):
 
         # Add to collections
         cls._all_items.append(item)
-        cls.items[(strid, item.meta)] = item
-        cls._items_by_numid[(numid, item.meta)] = item
+        cls.items[(strid, meta)] = item
+        cls._items_by_numid[(numid, meta)] = item
         if item.armorslot:
             cls.armor.append(item)
 
