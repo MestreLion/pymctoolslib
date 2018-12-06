@@ -30,6 +30,7 @@ __all__ = [
     "load_world",
     "get_player",
     "load_player_dimension",
+    'ArmorSlot',
     "ItemTypes",
     "ItemType",
     "Item",
@@ -154,11 +155,28 @@ class NbtObject(object):
         return name in self.nbt
 
 
+
+
+class ArmorSlot(object):
+    HEAD  = 103
+    CHEST = 102
+    LEGS  = 101
+    FEET  = 100
+    OFFHAND = -106
+
+
+
+
 class ItemTypes(object):
     items = collections.OrderedDict()
+    armor = []
+
     _items_by_numid = collections.OrderedDict()
     _all_items = []
     _re_strid = re.compile(r'\W')  # == r'[^a-zA-Z0-9_]'
+
+    _armor_slots =      {_[1]: ArmorSlot.HEAD - (_[0] % 4) for _ in enumerate(range(298, 318))}
+    _armor_slots.update({_[1]: ArmorSlot.HEAD - (_[0] % 4) for _ in enumerate(('helmet', 'chestplate', 'leggings', 'boots'))})
 
     def __init__(self):
         if not self.items:
@@ -280,10 +298,18 @@ class ItemTypes(object):
         if (numid, item.meta) in cls._items_by_numid:
             raise KeyError("Item NumID must be unique or None: {0}".format(item))
 
+        # Armor handling
+        item.armorslot = cls._armor_slots.get(numid,
+                         cls._armor_slots.get(strid.split('_')[-1]))
+
         # Add to collections
         cls._all_items.append(item)
         cls.items[(strid, item.meta)] = item
         cls._items_by_numid[(numid, item.meta)] = item
+        if item.armorslot:
+            cls.armor.append(item)
+
+
 
 
 class ItemType(object):
@@ -296,6 +322,7 @@ class ItemType(object):
         is_block   = False,
         maxdamage  = 0,
         stacksize  = 64,
+        armorslot  = None,
         texture    = None,
         removed    = False,
         _itemtypes = None
@@ -311,6 +338,7 @@ class ItemType(object):
         self.is_block   = is_block
         self.maxdamage  = maxdamage
         self.stacksize  = stacksize
+        self.armorslot  = armorslot
         self.texture    = texture
         self.removed    = removed
 
@@ -319,7 +347,7 @@ class ItemType(object):
 
         # Integrity checks --
 
-        assert (not self.maxdamage) or (self.stacksize == 1), \
+        assert (self.maxdamage == 0) or (self.stacksize == 1), \
             "Items with durability must not stack: {0}".format(self)
 
         assert (self.numid is None) or (self.is_block == (self.numid < 256)), \
@@ -330,6 +358,15 @@ class ItemType(object):
 
         assert self.stacksize in (1, 16, 64), \
             "Stack size must be 1, 16 or 64: {0}".format(self)
+
+        assert (self.armorslot is None) or (self.maxdamage > 0), \
+            "Armor must have durability: {0}".format(self)
+
+
+    @property
+    def is_armor(self):
+        return bool(self.armorslot)
+
 
     def __repr__(self):
         numid = '' if self.numid is None else '{0:3d}, '.format(self.numid)
