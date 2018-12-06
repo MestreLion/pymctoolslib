@@ -22,7 +22,7 @@
 """
 Library to manipulate Minecraft worlds
 
-A wrapper to pymclevel with simpler API
+A wrapper to pymclevel/mceditlib with simpler API
 """
 
 __all__ = [
@@ -30,6 +30,7 @@ __all__ = [
     "load_world",
     "get_player",
     "load_player_dimension",
+    "ItemTypes",
     "Item",
     "get_chunks",
     "iter_chunks",
@@ -42,10 +43,14 @@ import argparse
 import logging
 import time
 import itertools
+import collections
+import json
+import re
 
 import progressbar
 
 
+DATADIR = osp.join(osp.dirname(__file__), 'mceditlib', 'blocktypes')
 log = logging.getLogger(__name__)
 
 
@@ -146,6 +151,180 @@ class NbtObject(object):
         return name in self.nbt
 
 
+class ItemTypes(object):
+    items = collections.OrderedDict()
+    _items_by_numid = collections.OrderedDict()
+    _all_items = []
+    _re_strid = re.compile(r'\W')  # == r'[^a-zA-Z0-9_]'
+
+    def __init__(self):
+        if not self.items:
+            self._load_default_items()
+
+    # TODO: Convert to collections.Mapping by adding these methods:
+    # __getitem__, __iter__, __len__
+
+    @classmethod
+    def findItem(cls, key, meta=None, prefix='minecraft'):
+        if not cls.items:
+            cls._load_default_items()
+
+        itemid = key
+        if isinstance(key, (list, tuple)):
+            itemid, meta = key  # meta taken from iterable, discard argument
+
+        # Check for numeric ID and use the alternate dictionary
+        if isinstance(itemid, (int, float)):
+            return cls._items_by_numid[(int(itemid), meta)]
+
+        # Add default prefix if needed, so 'dirt' => 'minecraft:dirt'
+        if ':' not in itemid:
+            itemid = ':'.join((prefix, itemid))
+
+        return cls.items[(itemid, meta)]
+
+
+    @classmethod
+    def _load_old_json(cls, path, blocks=False):
+        with open(path) as fp:
+            data = json.load(fp, object_pairs_hook=collections.OrderedDict)
+
+        for strid, item in data.items():
+            # Structure integrity checks
+            assert item['id'] > 0 and (blocks == (item['id'] <= 255)), \
+                "ID / Block mismatch: block={0}, {1}".format(blocks, item)
+            assert 'displayName' in item, \
+                "Missing 'displayName' in item: {0}".format(item)
+            assert blocks or 'texture' in item, \
+                "Missing texture in non-block item: {0}".format(item)
+
+            # Multi-data item (different meta / data values)
+            if isinstance(item['displayName'], (list, tuple)):
+                # More integrity-checks
+                i = len(item['displayName'])
+                assert i == item['maxdamage'] + 1, \
+                    "displayNames([0}) / maxdamage mismatch: {1}".format(i, item)
+
+                if 'texture' in item:
+                    if isinstance(item['texture'], (list, tuple)):
+                        assert len(item['texture']) == i, \
+                            "textures([0}) / maxdamage mismatch: {1}".format(
+                                len(item['texture']), item)
+                        textures = item['texture']
+                    else:
+                        textures = i * (item['texture'],)
+                else:
+                    textures = i * (None,)
+
+                items = zip(range(i), item['displayName'], textures)
+                maxdamage = 0
+
+            # Single-data
+            else:
+                assert not isinstance(item.get('texture', ''), (list, tuple)), \
+                    "Multi-texture for single-data item: {0}".format(item)
+                items = [(None, item['displayName'], item.get('texture'))]
+                maxdamage = item['maxdamage']
+
+            for meta, name, texture in items:
+                obj = ItemType(
+                    numid = item['id'],
+                    strid = strid,
+                    meta  = meta,
+                    name  = name,
+                    texture    = texture,
+                    maxdamage  = maxdamage,
+                    is_block   = blocks,
+                    stacksize  = item['stacksize'],
+                    obtainable = item['obtainable'],
+                    _itemtypes = cls,
+                )
+                cls._add_item(obj)
+
+    @classmethod
+    def _load_json(cls, path):
+        pass
+
+    @classmethod
+    def _load_default_items(cls):
+            cls._add_item(ItemType(0, 'air', None, 'Air', False, True))
+            cls._load_old_json(osp.join(DATADIR, 'tmp_itemblocks.json'), True)
+            cls._load_old_json(osp.join(DATADIR, 'tmp_items.json'))
+
+    @classmethod
+    def _add_item(cls, item, prefix='minecraft', duplicate_prefix='removed'):
+        strid = item.strid
+        numid = item.numid
+
+        # If StrID is missing, derive from name
+        if not strid:
+            strid = re.sub(cls._re_strid, '_', item.name).lower()
+
+        # Append the default prefix if there is none
+        if ':' not in strid:
+            strid = ':'.join((prefix, strid))
+
+        # Check for duplicate StrID and add duplicated prefix
+        if (strid, item.meta) in cls.items:
+            strid = ':'.join((duplicate_prefix, strid))
+            item.removed = True
+
+        # Check for missing numID and generate a (negative) dummy one
+        if numid is None:
+            numid = min(cls._items_by_numid)[0] - 1
+
+        # Check for duplicate NumID
+        if (numid, item.meta) in cls._items_by_numid:
+            raise KeyError("Item NumID must be unique or None: {0}".format(item))
+
+        # Add to collections
+        cls._all_items.append(item)
+        cls.items[(strid, item.meta)] = item
+        cls._items_by_numid[(numid, item.meta)] = item
+
+
+class ItemType(object):
+    def __init__(self,
+        numid,
+        strid,
+        meta,
+        name,
+        obtainable = True,
+        is_block   = False,
+        maxdamage  = 0,
+        stacksize  = 64,
+        texture    = None,
+        removed    = False,
+        _itemtypes = None
+    ):
+        # Mandatory
+        self.numid = numid
+        self.strid = strid
+        self.meta  = meta
+        self.name  = name
+
+        # Optional
+        self.obtainable = obtainable
+        self.is_block   = is_block
+        self.maxdamage  = maxdamage
+        self.stacksize  = stacksize
+        self.texture    = texture
+        self.removed    = removed
+
+        # Reference to container
+        self._itemtypes = _itemtypes
+
+        # Integrity checks --
+
+        assert (not self.maxdamage) or (self.stacksize == 1), \
+            "Items with durability must not stack: {0}".format(self)
+
+
+    def __repr__(self):
+        meta = '' if self.meta is None else '#{0}'.format(self.meta)
+        return '<{0.__class__.__name__}({0.numid:3d}, {0.strid}{1}, "{0.name}")>'.format(self, meta)
+
+
 class Item(NbtObject):
     _ItemTypes = None
     armor_ids = tuple(range(298, 318))
@@ -195,7 +374,7 @@ class Item(NbtObject):
                                       (116, 64),  # Enchantment Table
                                       (281, 64),  # Bowl
                                       (282,  1),  # Mushroom Stew
-                                      (324,  1),  # Wooden Door
+                                      (324, 64),  # Wooden Door, 1 before 1.8
                                       (337, 64),  # Clay (Ball)
                                       (344, 16),  # Egg
                                       (345, 64),  # Compass
