@@ -56,72 +56,6 @@ DATADIR = osp.join(osp.dirname(__file__), 'mceditlib', 'blocktypes')
 log = logging.getLogger(__name__)
 
 
-def basic_parser(description=None,
-                 player=True,
-                 default_world="New World",
-                 default_player="Player",
-                 **kw_argparser):
-    parser = argparse.ArgumentParser(description=description, **kw_argparser)
-
-    parser.add_argument('--quiet', '-q', dest='loglevel',
-                        const=logging.WARNING, default=logging.INFO,
-                        action="store_const",
-                        help="Suppress informative messages.")
-
-    parser.add_argument('--verbose', '-v', dest='loglevel',
-                        const=logging.DEBUG,
-                        action="store_const",
-                        help="Verbose mode, output extra info.")
-
-    parser.add_argument('--world', '-w', default=default_world,
-                        help="Minecraft world, either its 'level.dat' file"
-                            " or a name under '~/.minecraft/saves' folder."
-                            " [Default: '%(default)s']")
-
-    if player:
-        parser.add_argument('--player', '-p', default=default_player,
-                            help="Player name."
-                                " [Default: '%(default)s']")
-
-    return parser
-
-
-def load_world(name):
-    import pymclevel
-    if isinstance(name, pymclevel.MCLevel):
-        return name
-
-    try:
-        if osp.isfile(name):
-            return pymclevel.fromFile(name)
-        else:
-            return pymclevel.loadWorld(name)
-    except IOError as e:
-        raise MCError(e)
-    except pymclevel.mclevel.LoadingError:
-        raise MCError("Not a valid Minecraft world: '%s'" % name)
-
-
-def get_player(world, playername=None):
-    import pymclevel
-    if playername is None:
-        playername = "Player"
-    try:
-        return world.getPlayerTag(playername)
-    except pymclevel.PlayerNotFound:
-        raise MCError("Player not found in world '%s': %s" %
-                             (world.LevelName, playername))
-
-
-def load_player_dimension(levelname, playername=None):
-    world = load_world(levelname)
-    player = get_player(world, playername)
-    if not player["Dimension"].value == 0:  # 0 = Overworld
-        world = world.getDimension(player["Dimension"].value)
-
-    return world, player
-
-
 
 
 class NbtObject(object):
@@ -396,6 +330,8 @@ class ItemType(object):
             self, numid, meta)
 
 
+
+
 class Item(NbtObject):
     def __init__(self, nbt, keys=None):
         if keys is None:
@@ -448,6 +384,82 @@ class Item(NbtObject):
     def __str__(self):
         '''Item count and name. Example: ` 1 Super Bow [Bow]`'''
         return "%2d %s" % (self.nbt["Count"].value, self.name)
+
+
+
+
+
+
+def basic_parser(description=None,
+                 player=True,
+                 default_world="New World",
+                 default_player="Player",
+                 **kw_argparser):
+    parser = argparse.ArgumentParser(description=description, **kw_argparser)
+
+    parser.add_argument('--quiet', '-q', dest='loglevel',
+                        const=logging.WARNING, default=logging.INFO,
+                        action="store_const",
+                        help="Suppress informative messages.")
+
+    parser.add_argument('--verbose', '-v', dest='loglevel',
+                        const=logging.DEBUG,
+                        action="store_const",
+                        help="Verbose mode, output extra info.")
+
+    parser.add_argument('--world', '-w', default=default_world,
+                        help="Minecraft world, either its 'level.dat' file"
+                            " or a name under '~/.minecraft/saves' folder."
+                            " [Default: '%(default)s']")
+
+    if player:
+        parser.add_argument('--player', '-p', default=default_player,
+                            help="Player name."
+                                " [Default: '%(default)s']")
+
+    return parser
+
+
+
+
+def load_world(name):
+    import pymclevel
+    if isinstance(name, pymclevel.MCLevel):
+        return name
+
+    try:
+        if osp.isfile(name):
+            return pymclevel.fromFile(name)
+        else:
+            return pymclevel.loadWorld(name)
+    except IOError as e:
+        raise MCError(e)
+    except pymclevel.mclevel.LoadingError:
+        raise MCError("Not a valid Minecraft world: '%s'" % name)
+
+
+
+
+def get_player(world, playername=None):
+    import pymclevel
+    if playername is None:
+        playername = "Player"
+    try:
+        return world.getPlayerTag(playername)
+    except pymclevel.PlayerNotFound:
+        raise MCError("Player not found in world '%s': %s" %
+                             (world.LevelName, playername))
+
+
+
+
+def load_player_dimension(levelname, playername=None):
+    world = load_world(levelname)
+    player = get_player(world, playername)
+    if not player["Dimension"].value == 0:  # 0 = Overworld
+        world = world.getDimension(player["Dimension"].value)
+
+    return world, player
 
 
 
