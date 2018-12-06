@@ -384,87 +384,16 @@ class ItemType(object):
             self, numid, meta)
 
 
-
-
 class Item(NbtObject):
-    _ItemTypes = None
-    armor_ids = tuple(range(298, 318))
-    armor_strids = tuple(
-        'minecraft:{0}'.format('_'.join(_))
-        for _ in
-        itertools.product(('leather', 'chainmail', 'iron', 'diamond', 'golden'),
-                          ('helmet', 'chestplate', 'leggings', 'boots'))
-    ) + ('turtle_helmet',)
-
     def __init__(self, nbt, keys=None):
         if keys is None:
             keys = []
         keys.extend(("id", "Damage", "Count", "tag"))
         super(Item, self).__init__(nbt, keys)
 
-        # Improve upon pymclevel item data
-        if self._ItemTypes is None:
-            from pymclevel.items import items as ItemTypes
-
-            # Correct damage values for specific items
-            for itemid, maxdamage in ((298,  56),  # Leather Cap
-                                      (299,  81),  # Leather_Tunic
-                                      (300,  76),  # Leather_Pants
-                                      (301,  66),  # Leather_Boots
-                                      (302, 166),  # Chainmail_Helmet
-                                      (303, 241),  # Chainmail_Chestplate
-                                      (304, 226),  # Chainmail_Leggings
-                                      (305, 196),  # Chainmail_Boots
-                                      (306, 166),  # Iron_Helmet
-                                      (307, 241),  # Iron_Chestplate
-                                      (308, 226),  # Iron_Leggings
-                                      (309, 196),  # Iron_Boots
-                                      (310, 364),  # Diamond_Helmet
-                                      (311, 529),  # Diamond_Chestplate
-                                      (312, 496),  # Diamond_Leggings
-                                      (313, 430),  # Diamond_Boots
-                                      (314,  78),  # Golden_Helmet
-                                      (315,  87),  # Golden_Chestplate
-                                      (316,  76),  # Golden_Leggings
-                                      (317,  66),  # Golden_Boots
-                                      ):
-                ItemTypes.findItem(itemid).maxdamage = maxdamage - 1
-
-            # Correct stack size for specific items
-            for itemid, stacksize in ((58,  64),  # Workbench (Crafting Table)
-                                      (116, 64),  # Enchantment Table
-                                      (281, 64),  # Bowl
-                                      (282,  1),  # Mushroom Stew
-                                      (324, 64),  # Wooden Door, 1 before 1.8
-                                      (337, 64),  # Clay (Ball)
-                                      (344, 16),  # Egg
-                                      (345, 64),  # Compass
-                                      (347, 64),  # Clock
-                                      (368, 16),  # Ender Pearl
-                                      (379, 64),  # Brewing Stand
-                                      (380, 64),  # Cauldron
-                                      (395, 64),  # Empty Map
-                                      ):
-                ItemTypes.findItem(itemid).stacksize = stacksize
-
-            # Set stack size for items with durability
-            for itemtype in ItemTypes.itemtypes.itervalues():
-                if itemtype.maxdamage is not None:
-                    itemtype.stacksize = 1
-
-            # Save the corrected data to class attribute
-            self._ItemTypes = ItemTypes
-
         # Should be a property, but for simplicity and performance it's set here
-        self.type = self._ItemTypes.findItem(*self.key)
+        self.type = ItemTypes.findItem(*self.key)
 
-        # Fix for items using non-numeric IDs
-        if isinstance(self.type.id, basestring):
-            self.type.name = self._type_name(self.type.id)
-
-    @property
-    def is_armor(self):
-        return self.nbt['id'].value in self.armor_ids + self.armor_strids
 
     @property
     def key(self):
@@ -503,13 +432,10 @@ class Item(NbtObject):
         '''
         return "%2d %s" % (self.nbt["Count"].value, self.fullname)
 
+
     def __str__(self):
         '''Item count and name. Example: ` 1 Super Bow [Bow]`'''
         return "%2d %s" % (self.nbt["Count"].value, self.name)
-
-    @staticmethod
-    def _type_name(name):
-        return name.split(':', 1)[-1].replace('_', ' ').title()
 
 
 
