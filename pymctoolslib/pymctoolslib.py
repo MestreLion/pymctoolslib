@@ -196,13 +196,22 @@ class ItemTypes(object):
 
         # Check for numeric ID and use the alternate dictionary
         if isinstance(itemid, (int, float)):
-            return cls._items_by_numid[(int(itemid), meta)]
+            try:
+                return cls._items_by_numid[(int(itemid), meta)]
+            except KeyError:
+                pass
+            return cls._items_by_numid[(int(itemid), None)]
+
 
         # Add default prefix if needed, so 'dirt' => 'minecraft:dirt'
         if ':' not in itemid:
             itemid = ':'.join((prefix, itemid))
 
-        return cls.items[(itemid, meta)]
+        try:
+            return cls.items[(itemid, meta)]
+        except KeyError:
+            pass
+        return cls.items[(itemid, None)]
 
 
     @classmethod
