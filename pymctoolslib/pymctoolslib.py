@@ -31,6 +31,7 @@ __all__ = [
     "get_player",
     "load_player_dimension",
     "ItemTypes",
+    "ItemType",
     "Item",
     "get_chunks",
     "iter_chunks",
@@ -319,6 +320,14 @@ class ItemType(object):
         assert (not self.maxdamage) or (self.stacksize == 1), \
             "Items with durability must not stack: {0}".format(self)
 
+        assert (self.numid is None) or (self.is_block == (self.numid < 256)), \
+            "Numeric ID must be None or match Block/Item (less/greater than 256): {0}".format(self)
+
+        assert self.is_block or self.obtainable, \
+            "Non-Block Items must be obtainable: {0}".format(self)
+
+        assert self.stacksize in (1, 16, 64), \
+            "Stack size must be 1, 16 or 64: {0}".format(self)
 
     def __repr__(self):
         meta = '' if self.meta is None else '#{0}'.format(self.meta)
