@@ -211,7 +211,14 @@ class ItemTypes(object):
 
 
     @classmethod
-    def _load_old_json(cls, path, blocks=False):
+    def searchItems(cls, regex):
+        if not cls.items:
+            cls._load_default_items()
+        return (cls.items[_] for _ in cls.items if re.search(regex, _[0]))
+
+
+    @classmethod
+    def _load_old_json(cls, path, blocks=False, prefix='minecraft'):
         with open(path) as fp:
             data = json.load(fp, object_pairs_hook=collections.OrderedDict)
 
@@ -261,11 +268,12 @@ class ItemTypes(object):
                     texture    = texture,
                     maxdamage  = maxdamage,
                     is_block   = blocks,
+                    prefix     = prefix,
                     stacksize  = item['stacksize'],
                     obtainable = item['obtainable'],
                     _itemtypes = cls,
                 )
-                cls._add_item(obj)
+                cls._add_item(obj, prefix=prefix)
 
     @classmethod
     def _load_json(cls, path):
@@ -331,6 +339,7 @@ class ItemType(object):
         armorslot  = None,
         texture    = None,
         removed    = False,
+        prefix     = 'minecraft',
         _itemtypes = None
     ):
         # Mandatory
@@ -347,6 +356,7 @@ class ItemType(object):
         self.armorslot  = armorslot
         self.texture    = texture
         self.removed    = removed
+        self.prefix     = prefix
 
         # Reference to container
         self._itemtypes = _itemtypes
@@ -372,6 +382,11 @@ class ItemType(object):
     @property
     def is_armor(self):
         return bool(self.armorslot)
+
+
+    @property
+    def fullstrid(self):
+        return ':'.join((self.prefix, self.strid))
 
 
     def __repr__(self):
