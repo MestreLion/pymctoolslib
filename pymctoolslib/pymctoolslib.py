@@ -501,6 +501,14 @@ class Item(BaseItem):
         super(Item, self).__init__(nbt)
         self._create_nbt_attrs("Slot")
 
+    def set_slot(self, slot):
+        from pymclevel import nbt
+
+        if 'Slot' in self:
+            self['Slot'] = slot
+            return
+        self.add_tag('Slot', slot, nbt.TAG_Byte)
+
     def __str__(self):
         s = super(Item, self).__str__()
         return s if 'Slot' not in self else "%s in slot %s" % (s, self['Slot'])
