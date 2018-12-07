@@ -117,6 +117,12 @@ class NbtObject(collections.Mapping):
         """Return another object using a copy of the NBT data"""
         return self.__class__(self.copy())
 
+    def add_tag(self, name, value, TagClass, overwrite=False):
+        """Add a new NBT tag, possibly overwriting an existing one"""
+        if name in self and not overwrite:
+            raise MCError("%r already has a tag named '%s'" % (self, name))
+        self._nbt[name] = TagClass(value)
+
     def _create_nbt_attrs(self, *tags):
         """Create attributes for the given NBT tags"""
 
@@ -149,6 +155,8 @@ class NbtObject(collections.Mapping):
     def __getattr__(self, attr):
         """
         Auto-objectifying fallback for non-objectified tags in NBT
+        Compound tags are converted to NbtObject, and List tags have each
+        item objectified
         o.attr ==> o._nbt["attr"].value
         """
         try:
@@ -163,14 +171,18 @@ class NbtObject(collections.Mapping):
                                      % (self.__class__.__name__,
                                         attr))
 
-    def __setitem__(self, k, v):
-        """Set the NBT tag value attribute: o[k] = v ==> o._nbt[k].value = v"""
+    def __setitem__(self, tag, value):
+        """
+        Set the value attribute of an existing NBT tag
+        o[tag] = value ==> o._nbt[tag].value = value
+        Raise KeyError if tag is not found
+        """
         # A true MutableMapping should also provide __delitem__()
-        self._nbt[k].value = v
+        self._nbt[tag].value = value
 
-    def __getitem__(self, k):
-        """Get the NBT tag value attribute: o[k] ==> o._nbt[k].value"""
-        return self._nbt[k].value
+    def __getitem__(self, tag):
+        """Get the NBT tag value attribute: o[tag] ==> o._nbt[tag].value"""
+        return self._nbt[tag].value
 
     def __contains__(self, k):
         """Check existence of tag in NBT: if k in o ==> if k in o._nbt"""
