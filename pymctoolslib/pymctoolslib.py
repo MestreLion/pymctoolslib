@@ -306,7 +306,7 @@ class ItemTypes(object):
                     stacksize  = item['stacksize'],
                     obtainable = item['obtainable'],
                 )
-                cls._add_item(obj, prefix=prefix)
+                cls.add_item(obj, prefix=prefix)
 
     @classmethod
     def _load_json(cls, path):
@@ -314,12 +314,12 @@ class ItemTypes(object):
 
     @classmethod
     def _load_default_items(cls):
-        cls._add_item(ItemType(0, 'air', None, 'Air', False, True))
+        cls.add_item(ItemType(0, 'air', None, 'Air', False, True))
         cls._load_old_json(osp.join(DATADIR, 'tmp_itemblocks.json'), True)
         cls._load_old_json(osp.join(DATADIR, 'tmp_items.json'))
 
     @classmethod
-    def _add_item(cls, item, prefix='minecraft', duplicate_prefix='removed'):
+    def add_item(cls, item, prefix='minecraft', duplicate_prefix='removed'):
         strid = item.strid
         numid = item.numid
         meta  = item.meta  # or 0
