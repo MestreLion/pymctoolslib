@@ -26,14 +26,16 @@ A wrapper to pymclevel/mceditlib with simpler API
 """
 
 __all__ = [
-    "basic_parser",
-    "load_world",
-    "get_player",
-    "load_player_dimension",
     'ArmorSlot',
     "ItemTypes",
     "ItemType",
     "Item",
+    "Entity",
+    "XpOrb",
+    "basic_parser",
+    "load_world",
+    "get_player",
+    "load_player_dimension",
     "get_chunks",
     "iter_chunks",
     "MCError",
@@ -44,7 +46,6 @@ import os.path as osp
 import argparse
 import logging
 import time
-import itertools
 import collections
 import json
 import re
@@ -52,8 +53,12 @@ import copy
 
 import progressbar
 
+# Do NOT import pymclevel here, as it takes a LONG time to import
+# Lazily import inside functions and methods that need it
+
 
 DATADIR = osp.join(osp.dirname(__file__), 'mceditlib', 'blocktypes')
+
 log = logging.getLogger(__name__)
 
 
@@ -184,6 +189,7 @@ class NbtObject(collections.Mapping):
 
 
 class ItemTypes(object):
+    """A collection of ItemType objects"""
     items = collections.OrderedDict()
     armor = []
 
@@ -343,6 +349,10 @@ class ItemTypes(object):
 
 
 class ItemType(object):
+    """
+    Item type data, including Block types
+    Contains all item/block game data not tied to any NBT or World
+    """
     def __init__(self,
         numid,
         strid,
@@ -415,8 +425,12 @@ class ItemType(object):
 
 
 class Item(NbtObject):
+    """Base Item for SlotItem and EntityItem"""
+
     def __init__(self, nbt):
         super(Item, self).__init__(nbt)
+        # "tag" is optional, pre and perhaps post-flattening
+        # After Flattening, "Damage" goes to "tag" as pure durability
         self._create_nbt_attrs("id", "Damage", "Count", "tag")
 
         # Should be a property, but for simplicity and performance it's set here
