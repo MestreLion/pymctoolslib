@@ -422,9 +422,40 @@ class ItemType(object):
         return ':'.join((self.prefix, self.strid))
 
 
+    @classmethod
+    def from_item(cls, item):
+        """Create an ItemType from an Item. Useful for unknown types"""
+
+        assert isinstance(item, BaseItem), \
+            "Must be BaseItem instance: {0}".format(item)
+
+        if isinstance(item['id'], int):
+            numid = item['id']
+            strid = None
+            name  = "Unknown Item {0}".format(numid)
+            is_block = (numid <= 255)  # Per Minecraft convention
+        else:
+            numid = None
+            strid = item['id']
+            name  = strid.split(':', 1)[-1].replace('_', ' ').title()
+            is_block = False  # No way to know for sure
+
+        obj = cls(
+            numid = numid,
+            strid = strid,
+            name  = name,
+            meta  = item['Damage'],  # Can't tell if Data Value or Durability
+            is_block  = is_block,
+            maxdamage = 0,  # No way to know if it has durability or not
+            stacksize = item['Count'],  # at least
+        )
+        ItemTypes.add_item(obj, "unknown")
+        return obj
+
+
     def __repr__(self):
         numid = '' if self.numid is None else '{0:3d}, '.format(self.numid)
-        meta  = '' if self.meta  is None else '#{0}'.format(self.meta)
+        meta  = '' if self.meta  is None else '/{0}'.format(self.meta)
         return '<{0.__class__.__name__}({1}{0.strid}{2}, "{0.name}")>'.format(
             self, numid, meta)
 
@@ -440,7 +471,11 @@ class BaseItem(NbtObject):
         self._create_nbt_attrs("id", "Damage", "Count", "tag")
 
         # Should be a property, but for simplicity and performance it's set here
-        self.type = ItemTypes.findItem(*self.key)
+        try:
+            self.type = ItemTypes.findItem(*self.key)
+        except KeyError:
+            self.type = ItemType.from_item(self)
+            log.warning("Unknown item type for %r, created %r", self, self.type)
 
     @property
     def key(self):
