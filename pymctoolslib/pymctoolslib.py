@@ -201,7 +201,7 @@ class NbtObject(collections.Mapping):
 
 
 class ItemTypes(object):
-    """A collection of ItemType objects"""
+    """A singleton collection of ItemType objects"""
     items = collections.OrderedDict()
     armor = []
 
@@ -305,7 +305,6 @@ class ItemTypes(object):
                     prefix     = prefix,
                     stacksize  = item['stacksize'],
                     obtainable = item['obtainable'],
-                    _itemtypes = cls,
                 )
                 cls._add_item(obj, prefix=prefix)
 
@@ -378,7 +377,6 @@ class ItemType(object):
         texture    = None,
         removed    = False,
         prefix     = 'minecraft',
-        _itemtypes = None
     ):
         # Mandatory
         self.numid = numid
@@ -395,9 +393,6 @@ class ItemType(object):
         self.texture    = texture
         self.removed    = removed
         self.prefix     = prefix
-
-        # Reference to container
-        self._itemtypes = _itemtypes
 
         # Integrity checks --
 
