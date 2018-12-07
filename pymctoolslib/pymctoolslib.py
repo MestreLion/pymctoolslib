@@ -48,6 +48,7 @@ import itertools
 import collections
 import json
 import re
+import copy
 
 import progressbar
 
@@ -58,45 +59,126 @@ log = logging.getLogger(__name__)
 
 
 
-class NbtObject(object):
-    '''High-level wrapper for NBT Compound tags'''
-
-    def __init__(self, nbt, keys=None):
-        import pymclevel.nbt
-
-        assert nbt.tagID == pymclevel.nbt.TAG_COMPOUND, \
-            "Can not create NbtObject from a non-compound NBT tag"
-
-        self.nbt = nbt
-        self.keys = keys or []  # dummy, for now
-
-    def __str__(self):
-        return str(self.nbt)
-
-    def __repr__(self):
-        return "<%s>" % (self.__class__.__name__)
-
-    def __setitem__(self, key, value):
-        '''Set `obj.nbt["SomeKey"].value = value` as `obj["SomeKey"] = value`'''
-        self.nbt[key].value = value
-
-    def __getitem__(self, key):
-        '''Access `obj.nbt["SomeKey"].value` as `obj["SomeKey"]`'''
-        return self.nbt[key].value
-
-    def __contains__(self, name):
-        '''Allow `if key in obj...`'''
-        return name in self.nbt
+class Enum(object):
+    """Placeholder for future actual Enum implementation"""
+    pass
 
 
+class NbtTag(Enum):
+    END        =  0
+    BYTE       =  1
+    SHORT      =  2
+    INT        =  3
+    LONG       =  4
+    FLOAT      =  5
+    DOUBLE     =  6
+    BYTE_ARRAY =  7
+    STRING     =  8
+    LIST       =  9
+    COMPOUND   = 10
+    INT_ARRAY  = 11
+    LONG_ARRAY = 12
 
 
-class ArmorSlot(object):
+class ArmorSlot(Enum):
     HEAD  = 103
     CHEST = 102
     LEGS  = 101
     FEET  = 100
     OFFHAND = -106
+
+
+
+
+class NbtObject(collections.Mapping):
+    """High-level wrapper for NBT Compound tags"""
+
+    def __init__(self, nbt):
+        self._nbt = nbt
+
+    def get_nbt(self):
+        """
+        Return the NBT data.
+        Use should be avoided: instead, classes should provide methods to perform
+        the needed actions on its own NBT data without exposing it to clients
+        """
+        return self._nbt
+
+    def copy(self):
+        """Get a copy of the NBT data"""
+        return copy.deepcopy(self._nbt)
+
+    def clone(self):
+        """Return another object using a copy of the NBT data"""
+        return self.__class__(self.copy())
+
+    def _create_nbt_attrs(self, *tags):
+        """Create attributes for the given NBT tags"""
+
+        assert self._nbt.tagID == NbtTag.COMPOUND, \
+            "Can not create attributes from a non-compound NBT tag"
+
+        for tag in tags:
+            try:
+                value = self._objectify(self._nbt[tag])
+            except KeyError:  # tag not in NBT
+                value = None
+            setattr(self, tag.lower(), value)
+
+    def _objectify(self, nbt):
+        if nbt.tagID == NbtTag.COMPOUND:
+            return NbtObject(nbt)
+
+        if nbt.tagID == NbtTag.LIST:
+            return [self._objectify(_) for _ in nbt]
+
+        return nbt.value
+
+    def __str__(self):
+        s = self.get('id') or "%d tags" % len(self)
+        return "%s(%s)" % (self.__class__.__name__, s)
+
+    def __repr__(self):
+        return "<%s(%d tags)>" % (self.__class__.__name__, len(self))
+
+    def __getattr__(self, attr):
+        """
+        Auto-objectifying fallback for non-objectified tags in NBT
+        o.attr ==> o._nbt["attr"].value
+        """
+        try:
+            return self._objectify(self._nbt[attr])
+        except KeyError:
+            lowername = attr.lower()
+            for tag in self._nbt:
+                if tag.lower() == lowername:
+                    return self._objectify(self._nbt[tag])
+            else:
+                raise AttributeError("'%s' object has no attribute '%s'"
+                                     % (self.__class__.__name__,
+                                        attr))
+
+    def __setitem__(self, k, v):
+        """Set the NBT tag value attribute: o[k] = v ==> o._nbt[k].value = v"""
+        # A true MutableMapping should also provide __delitem__()
+        self._nbt[k].value = v
+
+    def __getitem__(self, k):
+        """Get the NBT tag value attribute: o[k] ==> o._nbt[k].value"""
+        return self._nbt[k].value
+
+    def __contains__(self, k):
+        """Check existence of tag in NBT: if k in o ==> if k in o._nbt"""
+        # Optional, as collections.Mapping provides it using __getitem__()
+        # However, as __getitem__() is non-trivial by direct access to .value
+        # it's safer to implement __contains__() independently
+        return k in self._nbt
+
+    def __iter__(self):
+        return iter(self._nbt)
+
+    def __len__(self):
+        return len(self._nbt)
 
 
 
@@ -333,11 +415,9 @@ class ItemType(object):
 
 
 class Item(NbtObject):
-    def __init__(self, nbt, keys=None):
-        if keys is None:
-            keys = []
-        keys.extend(("id", "Damage", "Count", "tag"))
-        super(Item, self).__init__(nbt, keys)
+    def __init__(self, nbt):
+        super(Item, self).__init__(nbt)
+        self._create_nbt_attrs("id", "Damage", "Count", "tag")
 
         # Should be a property, but for simplicity and performance it's set here
         self.type = ItemTypes.findItem(*self.key)
@@ -345,17 +425,15 @@ class Item(NbtObject):
 
     @property
     def key(self):
-        return (self.nbt['id'].value,
-                self.nbt['Damage'].value,)
+        return (self['id'], self['Damage'])
 
     @property
     def name(self):
         '''Item type name and its custom name (via Anvil), if any
             Examples: `Diamond Sword`, `Combat Sword [Diamond Sword]`
         '''
-        if 'tag' in self.nbt and 'display' in self.nbt['tag']:
-            return "%s [%s]" % (self.nbt['tag']['display']['Name'].value,
-                                self.type.name)
+        if 'tag' in self and 'display' in self['tag']:
+            return "%s [%s]" % (self['tag']['display']['Name'], self.type.name)
         else:
             return self.type.name
 
@@ -364,8 +442,8 @@ class Item(NbtObject):
         '''Item name with enchantment count.
             Example: `Combat Sword [Diamond Sword] {3 enchantments}`
         '''
-        if 'tag' in self.nbt and 'ench' in self.nbt['tag']:
-            enchants = len(self.nbt['tag']['ench'])
+        if 'tag' in self and 'ench' in self['tag']:
+            enchants = len(self['tag']['ench'])
             ench_str = " {%d enchantment%s}" % (enchants,
                                                 "s" if enchants > 1 else "")
         else:
@@ -378,12 +456,12 @@ class Item(NbtObject):
         '''Item full name with item count.
             Examples: `42 Coal`, ` 1 Super Bow [Bow] {3 enchantments}`
         '''
-        return "%2d %s" % (self.nbt["Count"].value, self.fullname)
+        return "%2d %s" % (self["Count"], self.fullname)
 
 
     def __str__(self):
         '''Item count and name. Example: ` 1 Super Bow [Bow]`'''
-        return "%2d %s" % (self.nbt["Count"].value, self.name)
+        return "%2d %s" % (self["Count"], self.name)
 
 
 
