@@ -447,7 +447,6 @@ class BaseItem(NbtObject):
         # Should be a property, but for simplicity and performance it's set here
         self.type = ItemTypes.findItem(*self.key)
 
-
     @property
     def key(self):
         return (self['id'], self['Damage'])
@@ -498,21 +497,13 @@ class BaseItem(NbtObject):
 
 class Item(BaseItem):
     """Item in an inventory slot"""
-    # TODO: Currently an alias for slot-less BaseItem
-
-
-
-
-class SlotItem(BaseItem):
-    """Item in an inventory slot"""
-    # TODO: This is the "real" Item class. Rename after evaluating consequences
     def __init__(self, nbt):
-        super(SlotItem, self).__init__(nbt)
+        super(Item, self).__init__(nbt)
         self._create_nbt_attrs("Slot")
 
     def __str__(self):
-        return "%s in slot %d" % (super(SlotItem, self).__str__(),
-                                  self.slot)
+        s = super(Item, self).__str__()
+        return s if 'Slot' not in self else "%s in slot %s" % (s, self['Slot'])
 
 
 
