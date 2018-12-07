@@ -424,11 +424,10 @@ class ItemType(object):
 
 
 
-class Item(NbtObject):
-    """Base Item for SlotItem and EntityItem"""
-
+class BaseItem(NbtObject):
+    """Base Item for Inventory and Entity Items"""
     def __init__(self, nbt):
-        super(Item, self).__init__(nbt)
+        super(BaseItem, self).__init__(nbt)
         # "tag" is optional, pre and perhaps post-flattening
         # After Flattening, "Damage" goes to "tag" as pure durability
         self._create_nbt_attrs("id", "Damage", "Count", "tag")
@@ -478,6 +477,57 @@ class Item(NbtObject):
         return "%2d %s" % (self["Count"], self.name)
 
 
+    def __repr__(self):
+        return '<{0}({1}, {2})>'.format(self.__class__.__name__,
+                                       self.key, self["Count"])
+
+
+
+
+class Item(BaseItem):
+    """Item in an inventory slot"""
+    # TODO: Currently an alias for slot-less BaseItem
+
+
+
+
+class SlotItem(BaseItem):
+    """Item in an inventory slot"""
+    # TODO: This is the "real" Item class. Rename after evaluating consequences
+    def __init__(self, nbt):
+        super(SlotItem, self).__init__(nbt)
+        self._create_nbt_attrs("Slot")
+
+    def __str__(self):
+        return "%s in slot %d" % (super(SlotItem, self).__str__(),
+                                  self.slot)
+
+
+
+
+class BaseEntity(NbtObject):
+    """Base class for all entities and the player"""
+    pass
+
+
+
+
+class Player(BaseEntity):
+    """The Player, an id-less Entity"""
+    pass
+
+
+
+
+class Entity(BaseEntity):
+    """Base for all Entities with id"""
+    pass
+
+
+
+
+class XpOrb(Entity):
+    pass
 
 
 
