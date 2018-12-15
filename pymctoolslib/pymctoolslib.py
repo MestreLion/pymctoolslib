@@ -23,6 +23,10 @@
 Library to manipulate Minecraft worlds
 
 A wrapper to pymclevel/mceditlib with simpler API
+
+All classes modeling game objects should inherit from either NbtObject,
+NbtListObject, or one of their subclasses. Constructors should have `nbt` as
+their only parameter and methods should expect similar high-level objects
 """
 
 __all__ = [
@@ -95,9 +99,8 @@ class ArmorSlot(Enum):
 
 
 
-class NbtObject(collections.Mapping):
-    """High-level wrapper for NBT Compound tags"""
-
+class NbtBase(collections.Sized, collections.Iterable, collections.Container):
+    """Base class for NbtObject and NbtListObject"""
     def __init__(self, nbt):
         self._nbt = nbt
 
@@ -116,6 +119,89 @@ class NbtObject(collections.Mapping):
     def clone(self):
         """Return another object using a copy of the NBT data"""
         return self.__class__(self.copy())
+
+    def __iter__(self):
+        return iter(self._nbt)
+
+    def __len__(self):
+        return len(self._nbt)
+
+
+
+
+class NbtListObject(NbtBase, collections.MutableSequence):
+    """
+    High-level wrapper for NBT List tags.
+    Subclasses SHOULD override ElementClass to a specialized element class
+    """
+    ElementClass = NbtBase
+
+    def __init__(self, nbt):
+        super(NbtListObject, self).__init__(nbt)
+        self._list = [self.ElementClass(_) for _ in nbt]
+
+    def __getitem__(self, idx):
+        """
+        For slices, return an NbtListObject (or a subclass) instance.
+        For integer indexes, return the (object) element
+        """
+        if isinstance(idx, int):
+            return self._list[idx]
+        elif isinstance(idx, slice):
+            return self.__class__(self._nbt[idx])
+        raise TypeError("%s indices must be integers or slices, not %s".
+                        format(self.__class__.__name__, type(idx)))
+
+    def __setitem__(self, idx, obj):
+        if not isinstance(idx, (int, slice)):
+            raise TypeError("%s indices must be integers or slices, not %s".
+                            format(self.__class__.__name__, type(idx)))
+        assert isinstance(obj, (self.ElementClass, self.__class__))
+        self._list[idx] = obj
+        if isinstance(obj, self.__class__):
+            self._nbt[idx] = [_.get_nbt() for _ in obj]
+        else:
+            self._nbt[idx] = obj.get_nbt()
+
+    def __delitem__(self, idx):
+        if not isinstance(idx, (int, slice)):
+            raise TypeError("%s indices must be integers or slices, not %s".
+                            format(self.__class__.__name__, type(idx)))
+        del self._list[idx]
+        del self._nbt[idx]
+
+    def __len__(self):
+        length = len(self._list)
+        assert length == len(self._nbt)
+        return length
+
+    def insert(self, idx, obj):
+        assert isinstance(obj, self.ElementClass)
+        self._list.insert(idx, obj)
+        self._nbt.insert(idx, obj.get_nbt())
+
+    def __contains__(self, element):
+        """Check existence of element in list, NOT value in elements' .value"""
+        # Optional, as collections.Sequence provides using __getitem__()
+        # However, as __getitem__() is non-trivial by direct access to .value
+        # it's safer to implement __contains__() independently
+        return isinstance(element, self.ElementClass) and element in self._list
+
+    def __iter__(self):
+        """Iterate on the elements list, NOT on NBT data"""
+        return iter(self._list)
+
+
+
+
+class NbtObject(NbtBase, collections.Mapping):
+    """High-level wrapper for NBT Compound tags"""
+
+    def __init__(self, nbt=None):
+        if nbt is None:
+            import pymclevel.nbt
+            nbt = pymclevel.nbt.TAG_Compound()
+        super(NbtObject, self).__init__(nbt)
 
     def add_tag(self, name, value, TagClass, overwrite=False):
         """Add a new NBT tag, possibly overwriting an existing one"""
@@ -190,12 +276,6 @@ class NbtObject(collections.Mapping):
         # However, as __getitem__() is non-trivial by direct access to .value
         # it's safer to implement __contains__() independently
         return k in self._nbt
-
-    def __iter__(self):
-        return iter(self._nbt)
-
-    def __len__(self):
-        return len(self._nbt)
 
 
 
