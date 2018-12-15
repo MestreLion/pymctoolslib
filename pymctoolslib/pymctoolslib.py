@@ -649,23 +649,92 @@ class Item(BaseItem):
 
 
 
+class Pos(collections.Sequence):
+    def __init__(self, value):
+        self._value = tuple(value)
+        self.x, self.y, self.z = self._value
+        self.cx, self.cz = self.chunkCoords()
+
+    def __getitem__(self, index):
+        return self._value[index]
+
+    def __len__(self):
+        return len(self._value)
+
+    def __str__(self):
+        strpos = "(%4d, %4d, %4d)" % self._value
+        strreg = "(%3d, %3d)" % self.regionCoords()
+        stroff = "(%2d, %2d)" % self.regionPos()
+        strcnk = "(%4d, %4d)" % self.chunkCoords()
+        return ("%s [Region %s, Chunk %s / %s]" %
+                (strpos,
+                 strreg,
+                 stroff,
+                 strcnk))
+
+    def __repr__(self):
+        return "<{0}({1:6.1f},{2:5.1f},{3:6.1f})>".format(
+            self.__class__.__name__, *self._value)
+
+    def chunkCoords(self):
+        '''Return (cx, cz), the coordinates of position's chunk'''
+        return (int(self.x) >> 4,
+                int(self.z) >> 4)
+
+    def chunkPos(self):
+        '''Return (xc, zc, y), the position in its chunk'''
+        return (int(self.x) & 0xf,
+                int(self.z) & 0xf,
+                int(self.y))
+
+    def regionCoords(self):
+        '''Return (rx, rz), the coordinates of position's region'''
+        cx, cz = self.chunkCoords()
+        return (cx >> 5,
+                cz >> 5)
+
+    def regionPos(self):
+        '''Return (cxr, czr), the chunk's position in its region'''
+        cx, cz = self.chunkCoords()
+        return (cx & 0x1F,
+                cz & 0x1F)
+
+
+
+
 class BaseEntity(NbtObject):
     """Base class for all entities and the player"""
-    pass
+    def __init__(self, nbt):
+        super(BaseEntity, self).__init__(nbt)
+        self.pos = Pos((_.value for _ in self._nbt["Pos"]))
+
+    def __str__(self):
+        return "%s, %s" % (self.pos, self.__class__.__name__)
 
 
 
 
 class Player(BaseEntity):
     """The Player, an id-less Entity"""
-    pass
+    def __init__(self, nbt):
+        super(Player, self).__init__(nbt)
+        self.inventory = PlayerInventory(self["Inventory"])
 
 
 
 
 class Entity(BaseEntity):
     """Base for all Entities with id"""
-    pass
+    def __init__(self, nbt):
+        super(Entity, self).__init__(nbt)
+        self._create_nbt_attrs("id")
+
+    @property
+    def name(self):
+        return self['id'].split(':', 1)[-1].replace('_', ' ').title()
+
+    def __str__(self):
+        return "%s, %s '%s'" % (self.pos, self.__class__.__name__, self.name)
 
 
 
