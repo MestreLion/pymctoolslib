@@ -502,12 +502,35 @@ class ItemType(object):
         return ':'.join((self.prefix, self.strid))
 
 
+    def to_item(self, count=1, slot=None):
+        """Create an Item from an ItemType"""
+
+        import pymclevel.nbt as nbt
+
+        item = NbtObject(nbt.TAG_Compound())  # == NbtObject()
+
+        if self.strid:
+            item.add_tag('id', self.fullstrid, nbt.TAG_String)
+        else:
+            item.add_tag('id', self.numid, nbt.TAG_Short)
+
+        item.add_tag('Damage', self.meta or 0, nbt.TAG_Short)
+        item.add_tag('Count', count, nbt.TAG_Byte)  # -127 to 127, must not be 0
+
+        item = Item(item.get_nbt())
+
+        if slot:
+            item.set_slot(slot)
+
+        return item
+
+
     @classmethod
     def from_item(cls, item):
         """Create an ItemType from an Item. Useful for unknown types"""
 
         assert isinstance(item, BaseItem), \
-            "Must be BaseItem instance: {0}".format(item)
+            "Must be BaseItem instance: {0}".format(repr(item))
 
         if isinstance(item['id'], int):
             numid = item['id']
@@ -531,6 +554,8 @@ class ItemType(object):
         )
         ItemTypes.add_item(obj, "unknown")
         return obj
+
+
 
 
     def __repr__(self):
@@ -592,11 +617,9 @@ class BaseItem(NbtObject):
         '''
         return "%2d %s" % (self["Count"], self.fullname)
 
-
     def __str__(self):
         '''Item count and name. Example: ` 1 Super Bow [Bow]`'''
         return "%2d %s" % (self["Count"], self.name)
-
 
     def __repr__(self):
         return '<{0}({1}, {2})>'.format(self.__class__.__name__,
