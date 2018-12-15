@@ -36,6 +36,9 @@ __all__ = [
     "Item",
     "Entity",
     "XpOrb",
+    "Player",
+    "Villager",
+    "Mob",
     "basic_parser",
     "load_world",
     "get_player",
@@ -741,6 +744,174 @@ class Entity(BaseEntity):
 
 class XpOrb(Entity):
     pass
+
+
+
+
+class Mob(Entity):
+    pass
+
+
+
+
+class Offer(NbtObject):
+    def __init__(self, nbt):
+        super(Offer, self).__init__(nbt)
+        self.buy = []
+        for tag in ("buy", "buyB"):
+            if tag in self:
+                self.buy.append(Item(self.get_nbt()[tag]))
+        self.sell = Item(self.get_nbt()['sell'])
+        self.name = "%s for %s" % (self.sell,
+                                   ", ".join([str(_) for _ in self.buy]),
+                                   )
+
+    def __str__(self):
+        return "[%2d/%2d] %s" % (self.uses,
+                                 self.maxuses,
+                                 self.name,
+                                 )
+
+
+class Villager(Mob):
+    professions = {0: "Farmer",
+                   1: "Librarian",
+                   2: "Priest",
+                   3: "Blacksmith",
+                   4: "Butcher"}
+
+    def __init__(self, nbt):
+        super(Villager, self).__init__(nbt)
+        self.profession = self.professions[self["Profession"]]
+        self.offers = []
+        if "Offers" in self:
+            for offer in self["Offers"]["Recipes"]:
+                self.offers.append(Offer(offer))
+
+    def __str__(self):
+        return ("%s: %s\n\t%s"
+                % (super(Villager, self).__str__(),
+                   self.profession,
+                   "\n\t".join([str(_) for _ in self.offers]))
+                ).strip()
+
+
+
+
+class Inventory(NbtListObject):
+    """Base class for Inventories"""
+    ElementClass = Item
+
+
+
+
+class PlayerInventory(Inventory):
+    """A Player's Inventory"""
+    def __init__(self, nbt):
+        super(PlayerInventory, self).__init__(nbt)
+
+        if len(self) == 40:  # shortcut for full inventory
+            self.free_slots = []
+            self.free_armor = []
+        else:
+            slots = set(_["Slot"] for _ in self)
+            self.free_slots = sorted(set(range(36))       - slots)
+            self.free_armor = sorted(set(range(100, 104)) - slots)
+
+
+    def stack_item(self, item, wear_armor=True):
+        """
+        Add an item clone to the inventory, trying to stack it with other items
+        according to item's max stack size. Original item is never changed.
+        Raise ValueError if item count is zero or greater than max stack size.
+        Return a 3-tuple (count_remaining, [slots, ...], [counts, ...])
+        """
+        item = item.clone()
+
+        size = item.type.stacksize
+        count = item["Count"]  # item.count will not be changed until fully stacked
+
+        # Assertions
+        if count == 0:
+            raise ValueError("Item count is zero: %s" % item)
+
+        if count > size:
+            raise ValueError(
+                "Item count is greater than max stack size (%d/%d): %s" %
+                (count, size, item))
+
+        # Shortcut 1-stack items like tools, armor, weapons, etc
+        if size == 1:
+            try:
+                return 0, [(self.add_item(item, wear_armor, clone=True), 1)]
+            except MCError:
+                return count, []
+
+        # Loop each inventory slot, stacking the item onto similar items
+        # that are not maximized until item count is 0
+        slots  = []
+        for stack in self:
+            if (stack.key == item.key and
+                stack.name == item.name and  # avoid stacking named items
+                stack["Count"] < size):
+
+                total = stack["Count"] + count
+                diff = min(size, total) - stack["Count"]
+                stack["Count"] += diff
+                count          -= diff
+
+                slots.append((stack["Slot"], diff))
+
+                if count == 0:
+                    break
+
+        if count > 0:
+            item["Count"] = count
+            try:
+                slots.append((self.add_item(item, wear_armor, clone=False),
+                              count))
+                count = 0
+            except MCError:
+                pass
+
+        return count, slots
+
+
+    def add_item(self, item, wear_armor=True, clone=True):
+        """Add an item (or a clone) to a free inventory slot.
+            Return the used slot space, if any, or raise mc.MCError
+        """
+        e = MCError("No suitable free inventory slot to add %s" %
+                    item.description)
+
+        # shortcut for no free slots
+        if not self.free_slots and not self.free_armor:
+            raise e
+
+        # Get a free slot suitable for the item
+        # For armor, try to wear in its corresponding slot
+        slot = None
+        if wear_armor and item.type.is_armor:
+            slot = item.type.armorslot
+            if slot in self.free_armor:
+                self.free_armor.remove(slot)
+            else:
+                # Corresponding armor slot is not free
+                slot = None
+
+        if slot is None:
+            if not self.free_slots:
+                raise e
+
+            slot = self.free_slots.pop(0)
+
+        # Add the item
+        if clone:
+            item = item.clone()
+        item.set_slot(slot)
+        self.inventory.append(item)
+
+        return slot
 
 
 
