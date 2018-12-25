@@ -909,7 +909,7 @@ class PlayerInventory(Inventory):
         if clone:
             item = item.clone()
         item.set_slot(slot)
-        self.inventory.append(item)
+        self.append(item)
 
         return slot
 
