@@ -67,6 +67,7 @@ import progressbar
 DATADIR = osp.join(osp.dirname(__file__), 'mceditlib', 'blocktypes')
 
 log = logging.getLogger(__name__)
+logging.getLogger('.'.join((__package__, 'pymclevel'))).setLevel(logging.WARNING)
 
 
 
