@@ -944,6 +944,10 @@ def basic_parser(description=None,
                             help="Player name."
                                 " [Default: '%(default)s']")
 
+    parser.add_argument('--apply', '-A',
+                        default=False, action="store_true",
+                        help="Apply changes and save the world.")
+
     return parser
 
 
