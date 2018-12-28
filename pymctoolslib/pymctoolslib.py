@@ -915,6 +915,150 @@ class PlayerInventory(Inventory):
         return slot
 
 
+class World(NbtObject):
+    def __init__(self, name):
+        """
+        Load a Minecraft World
+        `name` can be either a world directory path, a 'level.dat' file path,
+        or a World Name.
+        """
+
+        # pymclevel.infiniteworld.MCInfdevOldLevel instance
+        self.level = self._load(name)
+
+        # World NBT is level root tag NBT
+        super(World, self).__init__(self.level.root_tag['Data'])
+
+        # If Blocks/Items IDs are Numeric (until 1.7) or String (1.8 onwards)
+        # Check for known world's tags: 'Version' (1.9, 15w32a) or
+        # 'logAdminCommands' (14w03a, the same snapshot ID type changed)
+        self.is_numeric_id = (
+            'Version' in self.level.root_tag['Data'] or
+            'logAdminCommands' in self.level.root_tag['Data']['GameRules']
+        )
+
+        # Default player
+        self.player = Player(self.level.root_tag['Data']['Player'])
+
+
+    def get_player(name=None):
+        """Get a named player (server) or the world default player"""
+        if name is None or name == 'Player':
+            return self.player
+
+        try:
+            return Player(self.level.getPlayerTag(name))
+        except pymclevel.PlayerNotFound:
+            raise MCError("Player not found in world '%s': %s" %
+                                 (self.level.LevelName, name))
+
+
+    def get_dimension(dim=None):
+        """Return a Dimension, by default the Player's current one"""
+        if dim is None:
+            dim = self.player['Dimension']
+
+        if dim == 0:
+            return self.level
+        else:
+            return self.level.getDimension(dim)
+
+
+    def get_chunk_positions(self, dim=None, x=None, z=None, size=250):
+        """
+        Get chunk positions from a Dimension, by default the Player's current,
+        optionally box-bounded `size`x`size` centered on X, Z. Some chunks in
+        the box might not exist if not yet generated in-game.
+
+        Return a 2-tuple (number of chunks found, chunks iterable)
+        """
+        from pymclevel import box
+
+        world = self.get_dimension(dim)
+
+        if x is None and z is None:
+            return world.chunkCount, world.allChunks
+
+        if x is None:
+            ox = world.bounds.minx
+            sx = world.bounds.maxx - ox
+        else:
+            ox = x - radius
+            sx = 2 * radius
+
+        if z is None:
+            oz = world.bounds.minz
+            sz = world.bounds.maxz - oz
+        else:
+            oz = z - radius
+            sz = 2 * radius
+
+        bounds = box.BoundingBox((ox, 0, oz), (sx, world.Height, sz))
+
+        return bounds.chunkCount, bounds.chunkPositions
+
+
+    def iter_chunks(self, dim=None, x=None, z=None, size=250, progress=True):
+        """
+        Return a chunk iterator, optionally with console progressbar
+        Other parameters are same as get_chunks()
+        """
+        chunk_max, chunk_range = self.get_chunk_positions(dim, x, z, size)
+
+        if chunk_max <= 0:
+            log.warn("No chunks found in range %d of (%d, %d)",
+                     size, x, z)
+            return
+
+        world = self.get_dimension(dim)
+
+        if progress:
+            pbar = progressbar.ProgressBar(widgets=[' ', progressbar.Percentage(),
+                                                    ' Chunk ',
+                                                         progressbar.SimpleProgress(),
+                                                    ' ', progressbar.Bar('.'),
+                                                    ' ', progressbar.ETA(), ' '],
+                                           maxval=chunk_max).start()
+        start = time.clock()
+        chunk_count = 0
+
+        for cx, cz in chunk_range:
+            if not world.containsChunk(cx, cz):
+                continue
+
+            chunk = world.getChunk(cx, cz)
+            chunk_count += 1
+
+            yield chunk
+
+            if progress:
+                pbar.update(pbar.currval+1)
+
+        if progress:
+            pbar.finish()
+
+        log.info("Data from %d chunks%s extracted in %.2f seconds",
+                 chunk_count,
+                 (" (out of %d requested)" %  chunk_max)
+                    if chunk_max > chunk_count else "",
+                 time.clock()-start)
+
+
+    def _load(self, name):
+        import pymclevel
+        try:
+            if osp.isfile(name):
+                return pymclevel.fromFile(name)
+            elif osp.isdir(name):
+                return pymclevel.fromFile(osp.join(name, 'level.dat'))
+            else:
+                return pymclevel.loadWorld(name)
+        except IOError as e:
+            raise MCError(e)
+        except pymclevel.mclevel.LoadingError:
+            raise MCError("Not a valid Minecraft world: '%s'" % name)
+
+
 
 
 def basic_parser(description=None,
@@ -954,24 +1098,20 @@ def basic_parser(description=None,
 
 
 def load_world(name):
-    import pymclevel
-    if isinstance(name, pymclevel.MCLevel):
-        return name
-
-    try:
-        if osp.isfile(name):
-            return pymclevel.fromFile(name)
-        else:
-            return pymclevel.loadWorld(name)
-    except IOError as e:
-        raise MCError(e)
-    except pymclevel.mclevel.LoadingError:
-        raise MCError("Not a valid Minecraft world: '%s'" % name)
+    """Return pymclevel level. Deprecated, use World(name).level instead"""
+    return World(name).level
 
 
 
 
 def get_player(world, playername=None):
+    """Return Player NBT. Deprecated, use World().player.get_data() instead"""
+
+    # New World class
+    if isinstance(world, World):
+        return world.get_player(playername).get_data()
+
+    # Old pymclevel world Level
     import pymclevel
     if playername is None:
         playername = "Player"
@@ -985,17 +1125,24 @@ def get_player(world, playername=None):
 
 
 def load_player_dimension(levelname, playername=None):
-    world = load_world(levelname)
-    player = get_player(world, playername)
-    if not player["Dimension"].value == 0:  # 0 = Overworld
-        world = world.getDimension(player["Dimension"].value)
+    """
+    Return 2-tuple, the Dimension where the Player is, and the Player NBT
+    Deprecated
+    """
+    world = World(levelname)
+    player = world.get_player(playername)
 
-    return world, player
+    if not player["Dimension"] == 0:  # 0 = Overworld
+        dim = world.level.getDimension(player["Dimension"])
+        return dim, player.get_data()
+
+    return world.level, player.get_data()
 
 
 
 
 def get_chunks(world, x=None, z=None, radius=250):
+    """Deprecated, use World().get_chunk_positions()"""
     from pymclevel import box
 
     if x is None and z is None:
@@ -1021,7 +1168,7 @@ def get_chunks(world, x=None, z=None, radius=250):
 
 
 def iter_chunks(world, x=None, z=None, radius=250, progress=True):
-
+    """Deprecated, use World().iter_chunks()"""
     chunk_max, chunk_range = get_chunks(world, x, z, radius)
 
     if chunk_max <= 0:
