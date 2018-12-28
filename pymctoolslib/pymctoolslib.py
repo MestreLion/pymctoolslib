@@ -72,10 +72,27 @@ logging.getLogger('.'.join((__package__, 'pymclevel'))).setLevel(logging.WARNING
 
 
 
+class _EnumMeta(type):
+    def __init__(self, *args, **kwargs):
+        self._members = {k: v for k, v in vars(self).items() if not k.startswith('_')}
+        super(_EnumMeta, self).__init__(*args, **kwargs)
+
+    def __iter__(self):
+        """Iterate over sorted member values"""
+        return (_ for _ in sorted(self._members.values()))
+
+    def __len__(self):
+        """Number of members"""
+        return len(self._members)
+
+    def __contains__(self, value):
+        """Check member value"""
+        return value in self._members.values()
+
 
 class Enum(object):
     """Placeholder for future actual Enum implementation"""
-    pass
+    __metaclass__ = _EnumMeta
 
 
 class NbtTag(Enum):
