@@ -39,6 +39,7 @@ __all__ = [
     "Player",
     "Villager",
     "Mob",
+    "World",
     "basic_parser",
     "load_world",
     "get_player",
@@ -560,8 +561,6 @@ class ItemType(object):
         return obj
 
 
-
-
     def __repr__(self):
         numid = '' if self.numid is None else '{0:3d}, '.format(self.numid)
         meta  = '' if self.meta  is None else '/{0}'.format(self.meta)
@@ -573,6 +572,7 @@ class ItemType(object):
 
 class BaseItem(NbtObject):
     """Base Item for Inventory and Entity Items"""
+
     def __init__(self, nbt):
         super(BaseItem, self).__init__(nbt)
         # "tag" is optional, pre and perhaps post-flattening
@@ -724,6 +724,10 @@ class Player(BaseEntity):
         super(Player, self).__init__(nbt)
         self.inventory = PlayerInventory(self["Inventory"])
 
+    @property
+    def name(self):
+        return self.get_nbt().name
+
 
 
 
@@ -808,6 +812,7 @@ class Inventory(NbtListObject):
 
 class PlayerInventory(Inventory):
     """A Player's Inventory"""
+
     def __init__(self, nbt):
         super(PlayerInventory, self).__init__(nbt)
 
@@ -916,11 +921,13 @@ class PlayerInventory(Inventory):
 
 
 class World(NbtObject):
+    """Minecraft World"""
     def __init__(self, name):
         """
         Load a Minecraft World
-        `name` can be either a world directory path, a 'level.dat' file path,
-        or a World Name.
+        `name` can be either a 'level.dat' file path, a directory path,
+        or a directory basename from default Minecraft saves directory
+        (on Linux, ~/.minecraft/saves)
         """
 
         # pymclevel.infiniteworld.MCInfdevOldLevel instance
@@ -941,19 +948,34 @@ class World(NbtObject):
         self.player = Player(self.level.root_tag['Data']['Player'])
 
 
-    def get_player(name=None):
+    @property
+    def name(self):
+        return self['LevelName']
+    @name.setter
+    def name(self, value):
+        self['LevelName'] = value
+
+
+    @property
+    def filename(self):
+        return self.level.filename
+
+
+    def get_player(self, name=None):
         """Get a named player (server) or the world default player"""
         if name is None or name == 'Player':
             return self.player
 
+        from pymclevel import PlayerNotFound
+
         try:
             return Player(self.level.getPlayerTag(name))
-        except pymclevel.PlayerNotFound:
+        except PlayerNotFound:
             raise MCError("Player not found in world '%s': %s" %
-                                 (self.level.LevelName, name))
+                          (self.name, name))
 
 
-    def get_dimension(dim=None):
+    def get_dimension(self, dim=None):
         """Return a Dimension, by default the Player's current one"""
         if dim is None:
             dim = self.player['Dimension']
@@ -983,15 +1005,15 @@ class World(NbtObject):
             ox = world.bounds.minx
             sx = world.bounds.maxx - ox
         else:
-            ox = x - radius
-            sx = 2 * radius
+            ox = x - size
+            sx = 2 * size
 
         if z is None:
             oz = world.bounds.minz
             sz = world.bounds.maxz - oz
         else:
-            oz = z - radius
-            sz = 2 * radius
+            oz = z - size
+            sz = 2 * size
 
         bounds = box.BoundingBox((ox, 0, oz), (sx, world.Height, sz))
 
@@ -1105,11 +1127,11 @@ def load_world(name):
 
 
 def get_player(world, playername=None):
-    """Return Player NBT. Deprecated, use World().player.get_data() instead"""
+    """Return Player NBT. Deprecated, use World().player.get_nbt() instead"""
 
     # New World class
     if isinstance(world, World):
-        return world.get_player(playername).get_data()
+        return world.get_player(playername).get_nbt()
 
     # Old pymclevel world Level
     import pymclevel
@@ -1136,7 +1158,7 @@ def load_player_dimension(levelname, playername=None):
         dim = world.level.getDimension(player["Dimension"])
         return dim, player.get_data()
 
-    return world.level, player.get_data()
+    return world.level, player.get_nbt()
 
 
 
