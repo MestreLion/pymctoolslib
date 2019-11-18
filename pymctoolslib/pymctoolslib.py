@@ -1173,12 +1173,12 @@ def basic_parser(description=None,
                  **kw_argparser):
     parser = argparse.ArgumentParser(description=description, **kw_argparser)
 
-    parser.add_argument('--quiet', '-q', dest='loglevel',
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--quiet', '-q', dest='loglevel',
                         const=logging.WARNING, default=logging.INFO,
                         action="store_const",
                         help="Suppress informative messages.")
-
-    parser.add_argument('--verbose', '-v', dest='loglevel',
+    group.add_argument('--verbose', '-v', dest='loglevel',
                         const=logging.DEBUG,
                         action="store_const",
                         help="Verbose mode, output extra info.")
