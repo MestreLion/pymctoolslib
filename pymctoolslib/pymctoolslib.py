@@ -34,11 +34,12 @@ __all__ = [
     "ItemTypes",
     "ItemType",
     "Item",
+    "Player",
     "Entity",
     "XpOrb",
-    "Player",
-    "Villager",
     "Mob",
+    "Villager",
+    "BookAndQuill",
     "World",
     "basic_parser",
     "load_world",
@@ -638,6 +639,11 @@ class BaseItem(NbtObject):
         '''
         return "%2d %s" % (self["Count"], self.fullname)
 
+
+    def specialize(self):
+        pass
+
+
     def __str__(self):
         '''Item count and name. Example: ` 1 Super Bow [Bow]`'''
         return "%2d %s" % (self["Count"], self.name)
@@ -739,7 +745,7 @@ class Player(BaseEntity):
     """The Player, an id-less Entity"""
     def __init__(self, nbt):
         super(Player, self).__init__(nbt)
-        self.inventory = PlayerInventory(self["Inventory"])
+        self.inventory = PlayerInventory(self["Inventory"])  # why not get_nbt() ?
 
     @property
     def name(self):
@@ -823,6 +829,33 @@ class Villager(Mob):
 class Inventory(NbtListObject):
     """Base class for Inventories"""
     ElementClass = Item
+
+    def item(self, slot):
+        """Return the Item in a Slot"""
+        for item in self:
+            if item['Slot'] == slot:
+                return item
+        else:
+            raise MCError("Slot {0} is empty".format(slot))
+
+
+    def find(self, ID, meta=None, label=None):
+        """
+        Return an item in Inventory that matches `ID` and `meta` (Damage)
+        `ID` can be int, string, or (ID, meta) iterable. `meta` is ignored if None.
+        """
+        if not isinstance(ID, (int, basestring)):
+            ID, meta = ID
+
+        for item in self:
+            if item['id'] == ID and (meta is None or item['Damage'] == meta):
+                return item
+        else:
+            if label:
+                msg = "No {0} found in inventory".format(label)
+            else:
+                msg = "Not found in inventory: {0}".format((ID, meta))
+            raise MCError(msg)
 
 
 
@@ -935,6 +968,34 @@ class PlayerInventory(Inventory):
         self.append(item)
 
         return slot
+
+
+
+
+class BookAndQuill(Item):
+
+    @property
+    def pages(self):
+        if 'tag' not in self:
+            return []
+            #self.get_nbt().append(self._blank_tag())
+        return self['tag']['pages']
+    @pages.setter
+    def pages(self, value):
+        if 'tag' not in self:
+            self.get_nbt().append(self._blank_tag())
+        self['tag']['pages'] = value
+
+    def _blank_tag(self):
+        """
+        Books that were never written or opened contain no 'tag' key
+        Return such key as the game does for a book that was just opened for the
+        first time: with a "pages" list containing an empty string as 1st page
+        """
+        from pymclevel import nbt
+        return nbt.TAG_Compound([nbt.TAG_List([nbt.TAG_String()], 'pages')], 'tag')
+
+
 
 
 class World(NbtObject):
