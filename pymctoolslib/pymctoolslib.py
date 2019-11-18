@@ -42,6 +42,7 @@ __all__ = [
     "BookAndQuill",
     "World",
     "basic_parser",
+    "save_world",
     "load_world",
     "get_player",
     "load_player_dimension",
@@ -1144,6 +1145,10 @@ class World(NbtObject):
                  time.clock()-start)
 
 
+    def save(self):
+        self.level.saveInPlace()
+
+
     def _load(self, name):
         import pymclevel
         try:
@@ -1188,11 +1193,25 @@ def basic_parser(description=None,
                             help="Player name."
                                 " [Default: '%(default)s']")
 
-    parser.add_argument('--apply', '-A',
+    parser.add_argument('--save', '-S',
                         default=False, action="store_true",
                         help="Apply changes and save the world.")
 
     return parser
+
+
+
+
+def save_world(world, save=False):
+    """Conditionally saves the world. Convenience boilerplate"""
+    if save:
+        log.info("Applying changes and saving world...")
+        if isinstance(world, World):
+            world.save()
+        else:
+            world.saveInPlace()
+    else:
+        log.warn("Not saving world, use --save to apply changes")
 
 
 
