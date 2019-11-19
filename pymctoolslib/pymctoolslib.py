@@ -214,6 +214,11 @@ class NbtListObject(NbtBase, collections.MutableSequence):
         """Iterate on the elements list, NOT on NBT data"""
         return iter(self._list)
 
+    def __str__(self):
+        return "{0}({1})".format(self.__class__.__name__, ", ".join(str(_) for _ in self))
+
+    def __repr__(self):
+        return "<{0}({1})>".format(self.__class__.__name__, ", ".join(repr(_) for _ in self))
 
 
 
@@ -673,6 +678,9 @@ class Item(BaseItem):
         s = super(Item, self).__str__()
         return s if 'Slot' not in self else "%s in slot %s" % (s, self['Slot'])
 
+    def __repr__(self):
+        return '<{0}({1}, count={2}, slot={3})>'.format(self.__class__.__name__,
+                                               self.key, self["Count"], self["Slot"])
 
 
 
