@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+# PyMCToolsLib
 #
 #    Copyright (C) 2014 Rodrigo Silva (MestreLion) <linux@rodrigosilva.com>
 #
@@ -223,8 +222,8 @@ class NbtObject(NbtBase, collections.Mapping):
 
     def __init__(self, nbt=None):
         if nbt is None:
-            import pymclevel.nbt
-            nbt = pymclevel.nbt.TAG_Compound()
+            from .pymclevel import nbt
+            nbt = nbt.TAG_Compound()
         super(NbtObject, self).__init__(nbt)
 
     def add_tag(self, name, value, TagClass, overwrite=False):
@@ -529,7 +528,7 @@ class ItemType(object):
     def to_item(self, count=1, slot=None):
         """Create an Item from an ItemType"""
 
-        import pymclevel.nbt as nbt
+        from .pymclevel import nbt
 
         item = NbtObject(nbt.TAG_Compound())  # == NbtObject()
 
@@ -663,7 +662,7 @@ class Item(BaseItem):
         self._create_nbt_attrs("Slot")
 
     def set_slot(self, slot):
-        from pymclevel import nbt
+        from .pymclevel import nbt
 
         if 'Slot' in self:
             self['Slot'] = slot
@@ -845,7 +844,7 @@ class Inventory(NbtListObject):
         Return an item in Inventory that matches `ID` and `meta` (Damage)
         `ID` can be int, string, or (ID, meta) iterable. `meta` is ignored if None.
         """
-        if not isinstance(ID, (int, basestring)):
+        if not isinstance(ID, (int, str, bytes)):
             ID, meta = ID
 
         for item in self:
@@ -993,7 +992,7 @@ class BookAndQuill(Item):
         Return such key as the game does for a book that was just opened for the
         first time: with a "pages" list containing an empty string as 1st page
         """
-        from pymclevel import nbt
+        from .pymclevel import nbt
         return nbt.TAG_Compound([nbt.TAG_List([nbt.TAG_String()], 'pages')], 'tag')
 
 
@@ -1045,7 +1044,7 @@ class World(NbtObject):
         if name is None or name == 'Player':
             return self.player
 
-        from pymclevel import PlayerNotFound
+        from .pymclevel import PlayerNotFound
 
         try:
             return Player(self.level.getPlayerTag(name))
@@ -1073,7 +1072,7 @@ class World(NbtObject):
 
         Return a 2-tuple (number of chunks found, chunks iterable)
         """
-        from pymclevel import box
+        from .pymclevel import box
 
         world = self.get_dimension(dim)
 
@@ -1150,7 +1149,7 @@ class World(NbtObject):
 
 
     def _load(self, name):
-        import pymclevel
+        from . import pymclevel
         try:
             if osp.isfile(name):
                 return pymclevel.fromFile(name)
@@ -1231,7 +1230,7 @@ def get_player(world, playername=None):
         return world.get_player(playername).get_nbt()
 
     # Old pymclevel world Level
-    import pymclevel
+    from . import pymclevel
     if playername is None:
         playername = "Player"
     try:
@@ -1262,7 +1261,7 @@ def load_player_dimension(levelname, playername=None):
 
 def get_chunks(world, x=None, z=None, radius=250):
     """Deprecated, use World().get_chunk_positions()"""
-    from pymclevel import box
+    from .pymclevel import box
 
     if x is None and z is None:
         return world.chunkCount, world.allChunks
