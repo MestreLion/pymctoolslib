@@ -571,6 +571,11 @@ class ItemType(object):
             name  = strid.split(':', 1)[-1].replace('_', ' ').title()
             is_block = False  # No way to know for sure
 
+        # Set StackSize to the minimum standard to fit Count:
+        if   item['Count'] > 16: stacksize = 64
+        elif item['Count'] > 1:  stacksize = 16
+        else:                    stacksize =  1
+
         obj = cls(
             numid = numid,
             strid = strid,
@@ -578,7 +583,7 @@ class ItemType(object):
             meta  = item['Damage'],  # Can't tell if Data Value or Durability
             is_block  = is_block,
             maxdamage = 0,  # No way to know if it has durability or not
-            stacksize = item['Count'],  # at least
+            stacksize = stacksize,  # at least
         )
         ItemTypes.add_item(obj, "unknown")
         return obj
