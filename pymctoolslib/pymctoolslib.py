@@ -66,7 +66,7 @@ import progressbar
 # Lazily import inside functions and methods that need it
 
 
-DATADIR = osp.join(osp.dirname(__file__), 'mceditlib', 'blocktypes')
+DATADIR = osp.dirname(__file__)
 
 log = logging.getLogger(__name__)
 logging.getLogger('.'.join((__package__, 'pymclevel'))).setLevel(logging.WARNING)
@@ -312,6 +312,7 @@ class ItemTypes(object):
     """A singleton collection of ItemType objects"""
     items = collections.OrderedDict()
     armor = []
+    durability = {}
 
     _all_items = []
     _re_strid = re.compile(r'\W')  # == r'[^a-zA-Z0-9_]'
@@ -405,14 +406,37 @@ class ItemTypes(object):
                 cls.add_item(obj, prefix=prefix)
 
     @classmethod
-    def _load_json(cls, path):
-        pass
+    def _load_json(cls, path, prefix='minecraft'):
+        """items.json prepared from python_minecraft_data"""
+        if not cls.durability:
+            cls._load_durability()
+
+        with open(path) as fp:
+            data = json.load(fp, object_pairs_hook=collections.OrderedDict)
+
+        for key, item in data.items():
+            # Structure integrity checks
+            assert 'displayName' in item, \
+                "Missing 'displayName' in item: {0}".format(item)
+
+            obj = ItemType(
+                key        = key,
+                name       = item['displayName'],
+                durability = cls.durability.get(key),
+                is_block   = bool(item['id'] <= 255),  # Per Minecraft convention
+                prefix     = prefix,
+                stacksize  = item['stackSize'],
+            )
+            cls.add_item(obj, prefix=prefix)
 
     @classmethod
     def _load_default_items(cls):
-        cls.add_item(ItemType(0, 'air', None, 'Air', False, True))
-        cls._load_old_json(osp.join(DATADIR, 'tmp_itemblocks.json'), True)
-        cls._load_old_json(osp.join(DATADIR, 'tmp_items.json'))
+        cls._load_json(osp.join(DATADIR, 'items.json'))
+
+    @classmethod
+    def _load_durability(cls):
+        with open(osp.join(DATADIR, 'durability.json')) as fp:
+            cls.durability.update(json.load(fp, object_pairs_hook=collections.OrderedDict))
 
     @classmethod
     def add_item(cls, item, prefix='minecraft', duplicate_prefix='removed'):
