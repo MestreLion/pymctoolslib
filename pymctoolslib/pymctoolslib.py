@@ -313,12 +313,11 @@ class ItemTypes(object):
     items = collections.OrderedDict()
     armor = []
 
-    _items_by_numid = collections.OrderedDict()
     _all_items = []
     _re_strid = re.compile(r'\W')  # == r'[^a-zA-Z0-9_]'
 
-    _armor_slots =      {_[1]: ArmorSlot.HEAD - (_[0] % 4) for _ in enumerate(range(298, 318))}
-    _armor_slots.update({_[1]: ArmorSlot.HEAD - (_[0] % 4) for _ in enumerate(('helmet', 'chestplate', 'leggings', 'boots'))})
+    _armor_slots = {_[1]: ArmorSlot.HEAD - (_[0] % 4) for _ in
+                    enumerate(('helmet', 'chestplate', 'leggings', 'boots'))}
 
     def __init__(self):
         if not self.items:
@@ -328,28 +327,18 @@ class ItemTypes(object):
     # __getitem__, __iter__, __len__
 
     @classmethod
-    def findItem(cls, key, meta=None, prefix='minecraft'):
+    def findItem(cls, key, prefix='minecraft'):
         if not cls.items:
             cls._load_default_items()
 
-        itemid = key
-        if isinstance(key, (list, tuple)):
-            itemid, meta = key  # meta taken from iterable, discard argument
-
-        # Check for numeric ID and use the alternate dictionary
-        if isinstance(itemid, (int, float)):
-            if (itemid, meta) not in cls._items_by_numid:
-                meta = None
-            return cls._items_by_numid[(int(itemid), meta)]
-
         # Add default prefix if needed, so 'dirt' => 'minecraft:dirt'
-        if ':' not in itemid:
-            itemid = ':'.join((prefix, itemid))
+        if ':' not in key:
+            key = ':'.join((prefix, key))
 
-        if (itemid, meta) not in cls.items:
-            meta = None
-
-        return cls.items[(itemid, meta)]
+        try:
+            return cls.items[key]
+        except KeyError as e:
+            raise MCError(str(e))
 
 
     @classmethod
@@ -361,10 +350,11 @@ class ItemTypes(object):
 
     @classmethod
     def _load_old_json(cls, path, blocks=False, prefix='minecraft'):
+        """mceditlib/blocktypes/tmp_item{,blocks}.json from mcedit2"""
         with open(path) as fp:
             data = json.load(fp, object_pairs_hook=collections.OrderedDict)
 
-        for strid, item in data.items():
+        for key, item in data.items():
             # Structure integrity checks
             assert item['id'] > 0 and (blocks == (item['id'] <= 255)), \
                 "ID / Block mismatch: block={0}, {1}".format(blocks, item)
@@ -392,23 +382,21 @@ class ItemTypes(object):
                     textures = i * (None,)
 
                 items = zip(range(i), item['displayName'], textures)
-                maxdamage = 0
+                durability = None
 
             # Single-data
             else:
                 assert not isinstance(item.get('texture', ''), (list, tuple)), \
                     "Multi-texture for single-data item: {0}".format(item)
                 items = [(None, item['displayName'], item.get('texture'))]
-                maxdamage = item['maxdamage']
+                durability = item['maxdamage'] or None
 
-            for meta, name, texture in items:
+            for _meta, name, texture in items:
                 obj = ItemType(
-                    numid = item['id'],
-                    strid = strid,
-                    meta  = meta,
-                    name  = name,
+                    key        = key,
+                    name       = name,
                     texture    = texture,
-                    maxdamage  = maxdamage,
+                    durability = durability,
                     is_block   = blocks,
                     prefix     = prefix,
                     stacksize  = item['stacksize'],
@@ -428,39 +416,23 @@ class ItemTypes(object):
 
     @classmethod
     def add_item(cls, item, prefix='minecraft', duplicate_prefix='removed'):
-        strid = item.strid
-        numid = item.numid
-        meta  = item.meta  # or 0
-
-        # If StrID is missing, derive from name
-        if not strid:
-            strid = re.sub(cls._re_strid, '_', item.name).lower()
+        key = item.key
 
         # Append the default prefix if there is none
-        if ':' not in strid:
-            strid = ':'.join((prefix, strid))
+        if ':' not in key:
+            key = ':'.join((prefix, key))
 
-        # Check for duplicate StrID and add duplicated prefix
-        if (strid, meta) in cls.items:
-            strid = ':'.join((duplicate_prefix, strid))
+        # Check for duplicate key and add duplicated prefix
+        if key in cls.items:
+            key = ':'.join((duplicate_prefix, key))
             item.removed = True
 
-        # Check for missing numID and generate a (negative) dummy one
-        if numid is None:
-            numid = min(cls._items_by_numid)[0] - 1
-
-        # Check for duplicate NumID
-        if (numid, meta) in cls._items_by_numid:
-            raise KeyError("Item NumID must be unique or None: {0}".format(item))
-
         # Armor handling
-        item.armorslot = cls._armor_slots.get(numid,
-                         cls._armor_slots.get(strid.split('_')[-1]))
+        item.armorslot = cls._armor_slots.get(key.split('_')[-1])
 
         # Add to collections
         cls._all_items.append(item)
-        cls.items[(strid, meta)] = item
-        cls._items_by_numid[(numid, meta)] = item
+        cls.items[key] = item
         if item.armorslot:
             cls.armor.append(item)
 
@@ -473,13 +445,11 @@ class ItemType(object):
     Contains all item/block game data not tied to any NBT or World
     """
     def __init__(self,
-        numid,
-        strid,
-        meta,
+        key,
         name,
         obtainable = True,
         is_block   = False,
-        maxdamage  = 0,
+        durability = None,
         stacksize  = 64,
         armorslot  = None,
         texture    = None,
@@ -487,15 +457,13 @@ class ItemType(object):
         prefix     = 'minecraft',
     ):
         # Mandatory
-        self.numid = numid
-        self.strid = strid
-        self.meta  = meta
+        self.key = key
         self.name  = name
 
         # Optional
         self.obtainable = obtainable
         self.is_block   = is_block
-        self.maxdamage  = maxdamage
+        self.durability = durability
         self.stacksize  = stacksize
         self.armorslot  = armorslot
         self.texture    = texture
@@ -504,20 +472,17 @@ class ItemType(object):
 
         # Integrity checks --
 
-        assert (self.maxdamage == 0) or (self.stacksize == 1), \
-            "Items with durability must not stack: {0}".format(self)
-
-        assert (self.numid is None) or (self.is_block == (self.numid < 256)), \
-            "Numeric ID must be None or match Block/Item (less/greater than 256): {0}".format(self)
+        assert (self.durability is None) or (self.stacksize == 1), \
+            "Items with durability must not stack: {0!r}".format(self)
 
         assert self.is_block or self.obtainable, \
-            "Non-Block Items must be obtainable: {0}".format(self)
+            "Non-Block Items must be obtainable: {0!r}".format(self)
 
         assert self.stacksize in (1, 16, 64), \
-            "Stack size must be 1, 16 or 64: {0}".format(self)
+            "Stack size must be 1, 16 or 64: {0!r}".format(self)
 
-        assert (self.armorslot is None) or (self.maxdamage > 0), \
-            "Armor must have durability: {0}".format(self)
+        assert (self.armorslot is None) or self.durability, \
+            "Armor must have durability: {0!r}".format(self)
 
 
     @property
@@ -526,8 +491,8 @@ class ItemType(object):
 
 
     @property
-    def fullstrid(self):
-        return ':'.join((self.prefix, self.strid))
+    def fullkey(self):
+        return ':'.join((self.prefix, self.key))
 
 
     def to_item(self, count=1, slot=None):
@@ -536,13 +501,7 @@ class ItemType(object):
         from .pymclevel import nbt
 
         item = NbtObject(nbt.TAG_Compound())  # == NbtObject()
-
-        if self.strid:
-            item.add_tag('id', self.fullstrid, nbt.TAG_String)
-        else:
-            item.add_tag('id', self.numid, nbt.TAG_Short)
-
-        item.add_tag('Damage', self.meta or 0, nbt.TAG_Short)
+        item.add_tag('id', self.fullkey, nbt.TAG_String)
         item.add_tag('Count', count, nbt.TAG_Byte)  # -127 to 127, must not be 0
 
         item = Item(item.get_nbt())
@@ -560,16 +519,8 @@ class ItemType(object):
         assert isinstance(item, BaseItem), \
             "Must be BaseItem instance: {0}".format(repr(item))
 
-        if isinstance(item['id'], int):
-            numid = item['id']
-            strid = None
-            name  = "Unknown Item {0}".format(numid)
-            is_block = (numid <= 255)  # Per Minecraft convention
-        else:
-            numid = None
-            strid = item['id']
-            name  = strid.split(':', 1)[-1].replace('_', ' ').title()
-            is_block = False  # No way to know for sure
+        key  = item['id']
+        name = key.split(':', 1)[-1].replace('_', ' ').title()
 
         # Set StackSize to the minimum standard to fit Count:
         if   item['Count'] > 16: stacksize = 64
@@ -577,23 +528,21 @@ class ItemType(object):
         else:                    stacksize =  1
 
         obj = cls(
-            numid = numid,
-            strid = strid,
-            name  = name,
-            meta  = item['Damage'],  # Can't tell if Data Value or Durability
-            is_block  = is_block,
-            maxdamage = 0,  # No way to know if it has durability or not
-            stacksize = stacksize,  # at least
+            key        = key,
+            name       = name,
+            is_block   = False,      # No way to know for sure
+            durability = None,       # No way to know if it has durability or not
+            stacksize  = stacksize,  # At least
         )
         ItemTypes.add_item(obj, "unknown")
         return obj
 
 
+    def __str__(self):
+        return self.name
+
     def __repr__(self):
-        numid = '' if self.numid is None else '{0:3d}, '.format(self.numid)
-        meta  = '' if self.meta  is None else '/{0}'.format(self.meta)
-        return '<{0.__class__.__name__}({1}{0.strid}{2}, "{0.name}")>'.format(
-            self, numid, meta)
+        return '<{0.__class__.__name__}({0.key})>'.format(self)
 
 
 
@@ -603,20 +552,19 @@ class BaseItem(NbtObject):
 
     def __init__(self, nbt):
         super(BaseItem, self).__init__(nbt)
-        # "tag" is optional, pre and perhaps post-flattening
-        # After Flattening, "Damage" goes to "tag" as pure durability
-        self._create_nbt_attrs("id", "Damage", "Count", "tag")
+        # "tag" is optional
+        self._create_nbt_attrs("Count", "tag")
 
         # Should be a property, but for simplicity and performance it's set here
         try:
-            self.type = ItemTypes.findItem(*self.key)
+            self.type = ItemTypes.findItem(self.key)
         except KeyError:
             self.type = ItemType.from_item(self)
             log.warning("Unknown item type for %r, created %r", self, self.type)
 
     @property
     def key(self):
-        return (self['id'], self['Damage'])
+        return self['id']
 
     @property
     def name(self):
@@ -633,14 +581,16 @@ class BaseItem(NbtObject):
         '''Item name with enchantment count.
             Example: `Combat Sword [Diamond Sword] {3 enchantments}`
         '''
-        if 'tag' in self and 'ench' in self['tag']:
-            enchants = len(self['tag']['ench'])
-            ench_str = " {%d enchantment%s}" % (enchants,
-                                                "s" if enchants > 1 else "")
-        else:
-            ench_str = ""
-
-        return "%s%s" % (self.name, ench_str)
+        fullname = self.name
+        if 'tag' in self:
+            enchants = 0
+            for tag in ('Enchantments', 'StoredEnchantments'):
+                if tag in self['tag']:
+                    enchants = len(self['tag'][tag])
+            if enchants:
+                fullname += " {{{0} enchantment{1}}}".format(enchants,
+                                                             "s" if enchants > 1 else "")
+        return fullname
 
     @property
     def description(self):
@@ -659,8 +609,8 @@ class BaseItem(NbtObject):
         return "%2d %s" % (self["Count"], self.name)
 
     def __repr__(self):
-        return '<{0}({1}, {2})>'.format(self.__class__.__name__,
-                                       self.key, self["Count"])
+        return "<{0}('{1}' x {2})>".format(self.__class__.__name__,
+                                           self.key, self["Count"])
 
 
 
@@ -684,8 +634,8 @@ class Item(BaseItem):
         return s if 'Slot' not in self else "%s in slot %s" % (s, self['Slot'])
 
     def __repr__(self):
-        return '<{0}({1}, count={2}, slot={3})>'.format(self.__class__.__name__,
-                                               self.key, self["Count"], self["Slot"])
+        return "<{0}('{1}', count={2}, slot={3})>".format(self.__class__.__name__,
+                                                          self.key, self["Count"], self["Slot"])
 
 
 
