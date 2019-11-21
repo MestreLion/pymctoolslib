@@ -125,6 +125,10 @@ class ArmorSlot(Enum):
 class NbtBase(collections.Sized, collections.Iterable, collections.Container):
     """Base class for NbtObject and NbtListObject"""
     def __init__(self, nbt):
+        from .pymclevel import nbt as NBT
+        assert isinstance(nbt, tuple(NBT.tag_classes.values())), \
+            "Not an NBT when instantiating class {0}: {1}: {2!r}".format(
+                self.__class__.__name__, type(nbt), nbt)
         self._nbt = nbt
 
     def get_nbt(self):
@@ -227,8 +231,8 @@ class NbtObject(NbtBase, collections.Mapping):
 
     def __init__(self, nbt=None):
         if nbt is None:
-            from .pymclevel import nbt
-            nbt = nbt.TAG_Compound()
+            from .pymclevel import nbt as NBT
+            nbt = NBT.TAG_Compound()
         super(NbtObject, self).__init__(nbt)
 
     def add_tag(self, name, value, TagClass, overwrite=False):
@@ -732,7 +736,7 @@ class Player(BaseEntity):
     """The Player, an id-less Entity"""
     def __init__(self, nbt):
         super(Player, self).__init__(nbt)
-        self.inventory = PlayerInventory(self["Inventory"])  # why not get_nbt() ?
+        self.inventory = PlayerInventory(self.get_nbt()["Inventory"])
 
     @property
     def name(self):
