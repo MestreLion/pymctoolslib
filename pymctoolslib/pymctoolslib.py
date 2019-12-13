@@ -600,6 +600,7 @@ class BaseItem(NbtObject):
             Examples: `Diamond Sword`, `Combat Sword [Diamond Sword]`
         '''
         if 'tag' in self and 'display' in self['tag']:
+            # FIXME: tag.display.Name is now a JSON string: '{"text":"Silk Touch Pickaxe"}'
             return "%s [%s]" % (self['tag']['display']['Name'], self.type.name)
         else:
             return self.type.name
@@ -757,6 +758,9 @@ class Entity(BaseEntity):
 
     def __str__(self):
         return "%s, %s '%s'" % (self.pos, self.__class__.__name__, self.name)
+
+    def __repr__(self):
+        return "<{0.__class__.__name__}('{0.id}', {1} tags)>".format(self, len(self))
 
 
 
